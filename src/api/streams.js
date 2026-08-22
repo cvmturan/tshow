@@ -1,0 +1,418 @@
+const express = require('express');
+const router = express.Router();
+const addonManager = require('../core/addonManager');
+const transcode = require('./transcode');
+
+const SAMPLE_ADDON_ID = 'org.streamflix.open-samples';
+
+function normalizeType(type) {
+  return type === 'tv' ? 'series' : type;
+}
+
+function safeWebURL(value) {
+  if (typeof value !== 'string' || value.length > 4_000) return null;
+  try {
+    const url = new URL(value);
+    return ['https:', 'http:'].includes(url.protocol) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatFromToken(value) {
+  const token = String(value || '').trim().toLowerCase().split(';')[0];
+  if (!token) return '';
+  if (['video/mp4', 'application/mp4', 'mp4', 'm4v'].includes(token)) return 'mp4';
+  if (['video/webm', 'webm'].includes(token)) return 'webm';
+  if ([
+    'application/vnd.apple.mpegurl',
+    'application/x-mpegurl',
+    'audio/mpegurl',
+    'audio/x-mpegurl',
+    'hls',
+    'm3u8'
+  ].includes(token)) return 'hls';
+  if (['video/x-matroska', 'video/mkv', 'mkv', 'matroska'].includes(token)) return 'mkv';
+  if (['text/html', 'application/xhtml+xml', 'html', 'htm'].includes(token)) return 'html';
+  if (['application/dash+xml', 'dash', 'mpd'].includes(token)) return 'dash';
+  if (/^(application\/)?(zip|x-rar-compressed|x-7z-compressed|x-tar|gzip)$/.test(token)) return 'archive';
+  return '';
+}
+
+function formatFromPath(value) {
+  if (!value) return '';
+  let pathname = '';
+  const parsed = safeWebURL(value);
+  if (parsed) {
+    pathname = parsed.pathname.toLowerCase();
+  } else {
+    pathname = String(value).split(/[?#]/)[0].toLowerCase();
+  }
+  if (/\.m3u8$/.test(pathname)) return 'hls';
+  if (/\.(mp4|m4v)$/.test(pathname)) return 'mp4';
+  if (/\.webm$/.test(pathname)) return 'webm';
+  if (/\.mkv$/.test(pathname)) return 'mkv';
+  if (/\.mpd$/.test(pathname)) return 'dash';
+  if (/\.(html?|xhtml)$/.test(pathname)) return 'html';
+  if (/\.(zip|rar|7z|tar|tgz|gz)$/.test(pathname)) return 'archive';
+  return '';
+}
+
+function inferFormat(stream, url) {
+  const declaredFormats = [
+    formatFromToken(stream.type),
+    formatFromToken(stream.mimeType)
+  ].filter(Boolean);
+  const filename = formatFromPath(stream.behaviorHints?.filename);
+  const pathname = formatFromPath(url);
+  const unsafe = [...declaredFormats, filename, pathname]
+    .find((format) => ['mkv', 'archive', 'html', 'dash'].includes(format));
+  return unsafe || declaredFormats[0] || filename || pathname;
+}
+
+function normalizeStream(stream, addonId, addonName, originalIndex = 0) {
+  if (!stream || typeof stream !== 'object') return null;
+
+  const parsedURL = safeWebURL(stream.url);
+  const parsedExternalURL = safeWebURL(stream.externalUrl);
+  const ytId = typeof stream.ytId === 'string' && /^[a-zA-Z0-9_-]{6,20}$/.test(stream.ytId)
+    ? stream.ytId
+    : null;
+  const externalUrl = parsedExternalURL?.href || (ytId
+    ? `https://www.youtube.com/watch?v=${encodeURIComponent(ytId)}`
+    : null);
+  const sourceURL = parsedURL?.href || null;
+
+  const behaviorHints = stream.behaviorHints && typeof stream.behaviorHints === 'object'
+    ? stream.behaviorHints
+    : {};
+  const requestHeaders = behaviorHints.proxyHeaders?.request;
+  const headerPayload = requestHeaders && typeof requestHeaders === 'object' && Object.keys(requestHeaders).length
+    ? Buffer.from(JSON.stringify(requestHeaders)).toString('base64url').slice(0, 6000)
+    : null;
+  const notWebReady = behaviorHints.notWebReady === true;
+  const format = inferFormat(stream, sourceURL);
+
+  let browserReady = false;
+  let playbackMode = 'unsupported';
+  let unsupportedReason = '';
+
+  if (sourceURL) {
+    if (notWebReady && format === 'archive') {
+      unsupportedReason = 'Archive and download-pack sources cannot be played in the browser.';
+    } else if (format === 'html') {
+      unsupportedReason = 'This URL is a webpage, not a direct video stream.';
+    } else if (format === 'dash') {
+      unsupportedReason = 'DASH playback is not enabled in this player.';
+    } else {
+      browserReady = true;
+      playbackMode = format === 'hls'
+        ? 'hls'
+        : (format === 'mp4' || format === 'webm') && !headerPayload && !notWebReady
+          ? 'direct'
+          : 'proxy';
+    }
+  } else if (stream.infoHash || stream.fileIdx !== undefined) {
+    unsupportedReason = 'Torrent sources are outside this browser-safe player.';
+  } else if (
+    Array.isArray(stream.zipUrls) ||
+    Array.isArray(stream.rarUrls) ||
+    Array.isArray(stream['7zipUrls']) ||
+    Array.isArray(stream.tarUrls)
+  ) {
+    unsupportedReason = 'Archive and download-pack sources cannot be played in the browser.';
+  }
+
+  let playUrl = null;
+  let transcodeUrl = null;
+  let transcodeLowUrl = null;
+  if (browserReady && sourceURL) {
+    if (playbackMode === 'direct') {
+      playUrl = sourceURL;
+    } else {
+      const params = new URLSearchParams({ src: sourceURL });
+      if (headerPayload) params.set('h', headerPayload);
+      playUrl = `/api/proxy/stream?${params.toString()}`;
+    }
+    if (playbackMode !== 'hls') {
+      transcodeUrl = transcode.sessionPath({
+        src: sourceURL,
+        h: headerPayload,
+        vc: 'copy'
+      });
+      transcodeLowUrl = transcode.sessionPath({
+        src: sourceURL,
+        h: headerPayload,
+        vc: 'reencode'
+      });
+    }
+  }
+
+  const sizeBytes = Number(behaviorHints.videoSize) ||
+    parseSizeHint(stream.name, stream.title, stream.description);
+  const sizeLabel = formatSize(sizeBytes);
+
+  if (!browserReady && externalUrl) {
+    playbackMode = ytId ? 'youtube' : 'external';
+    unsupportedReason = '';
+  }
+
+  if (!browserReady && !externalUrl && !unsupportedReason) return null;
+
+  return {
+    url: playUrl,
+    externalPlayerUrl: sourceURL,
+    attemptUrl: null,
+    transcodeUrl,
+    transcodeLowUrl,
+    externalUrl,
+    ytId,
+    name: String(stream.name || stream.title || addonName || 'Stream').slice(0, 140),
+    title: String(stream.title || stream.name || 'Web stream').slice(0, 240),
+    description: String(stream.description || '').slice(0, 500),
+    quality: String(stream.quality || '').slice(0, 20),
+    sizeBytes: sizeBytes || null,
+    sizeLabel,
+    type: format === 'hls'
+      ? 'application/vnd.apple.mpegurl'
+      : format === 'mp4'
+        ? 'video/mp4'
+        : format === 'webm'
+          ? 'video/webm'
+          : format === 'mkv'
+            ? 'video/x-matroska'
+            : '',
+    format,
+    playbackMode,
+    browserReady,
+    requiresHeaders: Boolean(headerPayload),
+    notWebReady,
+    unsupportedReason: unsupportedReason || null,
+    subtitles: Array.isArray(stream.subtitles) ? stream.subtitles.slice(0, 30) : [],
+    behaviorHints,
+    isDemo: addonId === SAMPLE_ADDON_ID,
+    sourceAddon: addonId,
+    sourceAddonName: addonName || addonId,
+    _originalIndex: originalIndex
+  };
+}
+
+const SIZE_UNITS = { kb: 1024, mb: 1024 ** 2, gb: 1024 ** 3, tb: 1024 ** 4 };
+
+function parseSizeHint(...texts) {
+  const match = texts.join(' ').match(/(\d+(?:[.,]\d+)?)\s*(KB|MB|GB|TB)\b/i);
+  if (!match) return null;
+  const value = Number.parseFloat(match[1].replace(',', '.'));
+  const multiplier = SIZE_UNITS[match[2].toLowerCase()];
+  return Number.isFinite(value) && value > 0 ? Math.round(value * multiplier) : null;
+}
+
+function formatSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return null;
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  const rounded = unit <= 1 ? Math.round(value) : Math.round(value * 10) / 10;
+  return `${rounded} ${units[unit]}`;
+}
+
+function qualityScore(stream) {
+  const text = `${stream.quality || ''} ${stream.name || ''} ${stream.title || ''}`.toLowerCase();
+  if (text.includes('2160') || text.includes('4k')) return 4;
+  if (text.includes('1080')) return 3;
+  if (text.includes('720')) return 2;
+  if (text.includes('480')) return 1;
+  return 0;
+}
+
+function readinessScore(stream) {
+  if (stream.browserReady) {
+    const modeBonus = stream.playbackMode === 'direct' ? 60 : stream.playbackMode === 'hls' ? 30 : 0;
+    return (stream.isDemo ? 400 : 500) + modeBonus;
+  }
+  if (stream.externalUrl) return stream.playbackMode === 'youtube' ? 350 : 300;
+  return 0;
+}
+
+function compareStreams(left, right) {
+  const readiness = readinessScore(right) - readinessScore(left);
+  if (readiness) return readiness;
+  const quality = qualityScore(right) - qualityScore(left);
+  if (quality) return quality;
+  const secure = Number(String(right.url || right.externalUrl || '').startsWith('https:')) -
+    Number(String(left.url || left.externalUrl || '').startsWith('https:'));
+  if (secure) return secure;
+  const source = String(left.sourceAddon).localeCompare(String(right.sourceAddon));
+  if (source) return source;
+  return left._originalIndex - right._originalIndex;
+}
+
+function supportsRequest(manifest, type, id) {
+  if (!manifest?.resources?.includes('stream')) return false;
+  if (manifest.types?.length && !manifest.types.includes(type)) return false;
+  if (manifest.idPrefixes?.length && !manifest.idPrefixes.some((prefix) => id.startsWith(prefix))) {
+    return false;
+  }
+  return true;
+}
+
+async function collectStreams(type, id, addonIds) {
+  const normalizedType = normalizeType(type);
+  const knownIds = new Set(addonManager.addons.keys());
+  const selectedIds = addonIds?.length
+    ? addonIds.filter((addonId) => knownIds.has(addonId))
+    : Array.from(knownIds).filter((addonId) =>
+        supportsRequest(addonManager.getManifest(addonId), normalizedType, id)
+      );
+
+  selectedIds.sort((left, right) => {
+    if (left === SAMPLE_ADDON_ID) return 1;
+    if (right === SAMPLE_ADDON_ID) return -1;
+    return String(left).localeCompare(String(right));
+  });
+
+  const sourceResults = await Promise.all(selectedIds.slice(0, 20).map(async (addonId) => {
+    const addonName = addonManager.getManifest(addonId)?.name || addonId;
+    try {
+      const result = await addonManager.getStreams(addonId, normalizedType, id);
+      const rawStreams = Array.isArray(result.streams) ? result.streams : [];
+      const streams = rawStreams
+        .map((stream, index) => normalizeStream(stream, addonId, addonName, index))
+        .filter(Boolean)
+        .slice(0, 100);
+      return {
+        addonId,
+        addonName,
+        streams,
+        returned: rawStreams.length,
+        actionable: streams.filter((stream) => stream.browserReady || stream.externalUrl).length,
+        unsupported: streams.filter((stream) => !stream.browserReady && !stream.externalUrl).length +
+          Math.max(0, rawStreams.length - streams.length)
+      };
+    } catch (error) {
+      return {
+        addonId,
+        addonName,
+        streams: [],
+        returned: 0,
+        actionable: 0,
+        unsupported: 0,
+        error: error.message
+      };
+    }
+  }));
+
+  const streams = sourceResults
+    .flatMap((source) => source.streams)
+    .sort(compareStreams)
+    .map(({ _originalIndex, ...stream }) => stream);
+
+  return { streams, sources: sourceResults.map(({ streams: ignored, ...source }) => source) };
+}
+
+router.get('/play/:type/:id', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    const streamIndex = Math.max(0, Number.parseInt(req.query.streamIndex, 10) || 0);
+    const addonIds = req.query.addonId ? [String(req.query.addonId)] : null;
+    const { streams } = await collectStreams(type, id, addonIds);
+    const selected = streams[streamIndex];
+
+    if (!selected) {
+      return res.status(404).json({ error: 'No browser-compatible stream was found' });
+    }
+
+    res.json(selected);
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+router.get('/subtitles/:type/:id', async (req, res) => {
+  try {
+    const normalizedType = normalizeType(req.params.type);
+    const { id } = req.params;
+    if (!['movie', 'series'].includes(normalizedType) || !id || id.length > 180) {
+      return res.status(400).json({ error: 'Type must be movie or series' });
+    }
+
+    const providerIds = Array.from(addonManager.addons.keys())
+      .filter((addonId) => addonManager.getManifest(addonId)?.resources?.includes('subtitles'))
+      .slice(0, 6);
+
+    const results = await Promise.all(providerIds.map(async (addonId) => {
+      const name = addonManager.getManifest(addonId)?.name || addonId;
+      try {
+        const data = await addonManager.fetchAddonResource(addonId, 'subtitles', normalizedType, id, {}, 15_000);
+        const raw = Array.isArray(data?.subtitles) ? data.subtitles : [];
+        return {
+          addonId,
+          name,
+          subtitles: raw.filter((subtitle) =>
+            subtitle &&
+            typeof subtitle.url === 'string' &&
+            /^https?:\/\//i.test(subtitle.url) &&
+            subtitle.url.length <= 4000
+          ).slice(0, 40)
+        };
+      } catch (error) {
+        return { addonId, name, subtitles: [], error: error.message };
+      }
+    }));
+
+    const seen = new Set();
+    const subtitles = [];
+    for (const provider of results) {
+      for (const subtitle of provider.subtitles) {
+        const key = `${String(subtitle.lang || '').toLowerCase()}|${subtitle.url}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        subtitles.push({
+          id: String(subtitle.id || subtitle.url).slice(0, 200),
+          url: subtitle.url,
+          lang: String(subtitle.lang || '').slice(0, 12),
+          label: String(subtitle.label || '').slice(0, 60),
+          provider: provider.name
+        });
+      }
+    }
+    subtitles.sort((left, right) => String(left.lang).localeCompare(String(right.lang)));
+
+    res.json({
+      subtitles: subtitles.slice(0, 80),
+      providers: results.map(({ addonId, name, subtitles: ignored, error }) => ({ addonId, name, error }))
+    });
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+router.get('/:type/:id', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    if (!['movie', 'series', 'tv'].includes(type)) {
+      return res.status(400).json({ error: 'Type must be movie or series' });
+    }
+    if (!id || id.length > 180) {
+      return res.status(400).json({ error: 'Invalid media id' });
+    }
+
+    const addonIds = req.query.addonIds
+      ? String(req.query.addonIds).split(',').map((value) => value.trim()).filter(Boolean)
+      : null;
+
+    const { streams, sources } = await collectStreams(type, id, addonIds);
+    res.json({ streams, sources, count: streams.length });
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+router.classifyStream = normalizeStream;
+router.compareStreams = compareStreams;
+
+module.exports = router;

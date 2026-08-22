@@ -111,4 +111,3 @@ Optional Real-Debrid, AllDebrid, Premiumize, and TorBox tokens can be placed in 
 - `tests/` — local API and security smoke tests
 
 Cvm Turan uses original branding and does not copy Netflix artwork or trademarks. TMDB metadata and images are used only when configured; the app is not endorsed or certified by TMDB.
-

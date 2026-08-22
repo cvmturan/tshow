@@ -1,0 +1,26 @@
+{
+  "name": "streamflix",
+  "version": "1.1.0",
+  "private": true,
+  "description": "A local-first cinematic media browser with manual Stremio-compatible add-ons",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "check": "node scripts/check.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "compression": "^1.7.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "ffmpeg-static": "^5.3.0",
+    "helmet": "^8.0.0",
+    "hls.js": "^1.6.13"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
