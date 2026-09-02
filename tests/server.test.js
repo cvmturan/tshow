@@ -17,6 +17,7 @@ const { createApp, startServer } = require('../server');
 const streamRouter = require('../src/api/streams');
 const transcodeRouter = require('../src/api/transcode');
 const addonManager = require('../src/core/addonManager');
+const tvmaze = require('../src/core/tvmaze');
 
 let server;
 let baseURL;
@@ -108,7 +109,55 @@ test('safe built-in add-ons are loaded and Torrentio is not bundled', async () =
   assert.ok(ids.includes('org.streamflix.catalog'));
   assert.ok(ids.includes('org.streamflix.open-samples'));
   assert.ok(ids.includes('org.cvmturan.discovery'));
+  assert.ok(ids.includes('org.streamflix.cinemeta'));
+  assert.ok(ids.includes('org.cvmturan.tvmaze'));
   assert.ok(!ids.some((id) => id.toLowerCase().includes('torrentio')));
+});
+
+test('permanent legal search providers are combined without depending on user add-ons', async () => {
+  const originalSearchCatalog = addonManager.searchCatalog;
+  addonManager.searchCatalog = async (descriptor) => ({
+    ...descriptor,
+    data: {
+      metas: [{
+        id: descriptor.type === 'movie' ? 'tt1375666' : 'tt0903747',
+        type: descriptor.type,
+        name: descriptor.type === 'movie' ? 'Inception' : 'Breaking Bad',
+        poster: 'https://images.example.test/poster.jpg'
+      }]
+    }
+  });
+
+  try {
+    const { response, data } = await getJSON('/api/addons/search?query=breaking');
+    assert.equal(response.status, 200);
+    assert.ok(data.providers.includes('Cinemeta Search & Metadata'));
+    assert.ok(data.providers.includes('TVmaze Series Search'));
+    assert.equal(data.groups.length, 3);
+    assert.ok(data.groups.some((group) => group.type === 'movie'));
+    assert.ok(data.groups.some((group) => group.addon.id === 'org.cvmturan.tvmaze'));
+  } finally {
+    addonManager.searchCatalog = originalSearchCatalog;
+  }
+});
+
+test('TVmaze metadata is converted to safe series cards with posters and IMDb ids', () => {
+  const meta = tvmaze.normalizeShow({
+    id: 169,
+    name: 'Breaking Bad',
+    summary: '<p>A chemistry teacher &amp; his former student.</p>',
+    premiered: '2008-01-20',
+    image: { original: 'https://static.tvmaze.com/poster.jpg' },
+    rating: { average: 9.3 },
+    genres: ['Drama', 'Crime'],
+    externals: { imdb: 'tt0903747' }
+  });
+  assert.equal(meta.id, 'tt0903747');
+  assert.equal(meta.type, 'series');
+  assert.equal(meta.poster, 'https://static.tvmaze.com/poster.jpg');
+  assert.equal(meta.releaseInfo, '2008');
+  assert.equal(meta.description, 'A chemistry teacher & his former student.');
+  assert.ok(!meta.description.includes('<'));
 });
 
 test('stream lookup returns the public browser-playable demo', async () => {
@@ -403,6 +452,7 @@ test('HTML app is served with a strict same-origin security policy', async () =>
   assert.match(html, /id="try-direct-source"/);
   assert.match(html, /id="source-summary"/);
   assert.match(html, /data-source-filter="app-only"/);
+  assert.match(html, /TVmaze/);
   assert.match(response.headers.get('content-security-policy') || '', /default-src 'self'/);
   assert.match(
     response.headers.get('content-security-policy') || '',

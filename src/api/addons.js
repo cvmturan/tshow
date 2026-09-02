@@ -33,6 +33,15 @@ router.get('/manifests', async (req, res) => {
   }
 });
 
+router.get('/search', async (req, res) => {
+  try {
+    const result = await addonManager.searchCatalogs(req.query.query, clientId(req));
+    res.json(result);
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
 router.get('/manifest/:id', async (req, res) => {
   try {
     const { id } = req.params;

@@ -525,9 +525,9 @@
 
         const candidates = [];
         if (
-            sourceAddon?.manifestURL &&
-            Array.isArray(sourceAddon.resources) &&
-            sourceAddon.resources.includes('meta')
+            Array.isArray(sourceAddon?.resources) &&
+            sourceAddon.resources.includes('meta') &&
+            (sourceAddon.manifestURL || sourceAddon.id === 'org.cvmturan.tvmaze')
         ) {
             candidates.push(sourceAddon.id);
         }
@@ -1663,28 +1663,27 @@
         }
 
         let globalResults = [];
+        let searchProviders = [];
         try {
-            const searchAddonId = 'org.streamflix.cinemeta';
-            const descriptor = {
-                addon: { id: searchAddonId, name: 'Cinemeta Metadata' },
-                catalog: { id: 'search', name: 'Global search' }
-            };
-            const [movieData, seriesData] = await Promise.all([
-                api(`/api/addons/catalog/${searchAddonId}/movie/top?search=${encodeURIComponent(query)}`),
-                api(`/api/addons/catalog/${searchAddonId}/series/top?search=${encodeURIComponent(query)}`)
-            ]);
-            globalResults = [
-                ...normalizeLiveCatalog(movieData, { ...descriptor, type: 'movie' }),
-                ...normalizeLiveCatalog(seriesData, { ...descriptor, type: 'series' })
-            ];
+            const searchData = await api(`/api/addons/search?query=${encodeURIComponent(query)}`);
+            searchProviders = Array.isArray(searchData.providers) ? searchData.providers : [];
+            globalResults = (Array.isArray(searchData.groups) ? searchData.groups : [])
+                .flatMap((group) => normalizeLiveCatalog(group.data, {
+                    addon: group.addon,
+                    catalog: group.catalog,
+                    type: group.type
+                }));
         } catch {
-            // Global catalog search is best-effort; local results still apply.
+            // Permanent and user-installed search providers are best-effort.
         }
 
         const results = dedupeSearchResults([...localResults, ...globalResults, ...apiResults]).slice(0, 100);
         elements.searchGrid.replaceChildren(...results.map((item) => createMediaCard(item)));
+        const providerSummary = searchProviders.length
+            ? ` from ${searchProviders.join(', ')}`
+            : '';
         elements.searchSummary.textContent = results.length
-            ? `${pluralize(results.length, 'matching title')} across Cvm Turan and connected add-ons`
+            ? `${pluralize(results.length, 'matching title')}${providerSummary}`
             : 'No matching title was found in the loaded catalogs.';
         elements.searchEmpty.hidden = results.length > 0;
     }
@@ -2185,7 +2184,7 @@
     }
 
     async function api(path, options = {}, controls = {}) {
-        const usesCustomAddons = /^\/api\/(?:streams\/|addons\/(?:catalog|meta|streams)\/)/.test(path);
+        const usesCustomAddons = /^\/api\/(?:streams\/|addons\/(?:search(?:\?|$)|(?:catalog|meta|streams)\/))/.test(path);
         if (
             !controls.skipAddonSync &&
             usesCustomAddons &&
