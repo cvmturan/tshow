@@ -2,6 +2,7 @@ const axios = require('axios');
 const dns = require('dns').promises;
 const net = require('net');
 const sampleData = require('./sampleData');
+const tvmaze = require('./tvmaze');
 
 const MAX_MANIFEST_BYTES = 1024 * 1024;
 const MAX_RESOURCE_BYTES = 4 * 1024 * 1024;
@@ -9,6 +10,7 @@ const MAX_MANIFEST_URL_LENGTH = 8_192;
 const MAX_REMOTE_REDIRECTS = 3;
 const MAX_CLIENT_ADDONS = 20;
 const MAX_CLIENT_SESSIONS = 500;
+const MAX_SEARCH_CATALOGS = 12;
 const CLIENT_ID_PATTERN = /^[a-f0-9]{32}$/;
 
 function createPublicError(message, status = 400) {
@@ -94,13 +96,30 @@ class AddonManager {
       },
       {
         id: 'org.streamflix.cinemeta',
-        name: 'Cinemeta Metadata',
-        version: '1.0.0',
-        description: 'Episode and title metadata used to resolve standard Stremio movie and series identifiers.',
-        resources: ['meta'],
+        name: 'Cinemeta Search & Metadata',
+        version: '1.1.0',
+        description: 'Permanent official movie and series search, posters, title details, episodes, and trailers.',
+        resources: ['catalog', 'meta'],
         types: ['movie', 'series'],
         idPrefixes: ['tt'],
+        catalogs: [
+          { type: 'movie', id: 'top', name: 'Movie search', extra: [{ name: 'search' }] },
+          { type: 'series', id: 'top', name: 'Series search', extra: [{ name: 'search' }] }
+        ],
         manifestURL: 'https://v3-cinemeta.strem.io/manifest.json',
+        _source: 'built-in'
+      },
+      {
+        id: 'org.cvmturan.tvmaze',
+        name: 'TVmaze Series Search',
+        version: '1.0.0',
+        description: 'Permanent free and legal series search with posters and episode metadata from TVmaze.',
+        resources: ['catalog', 'meta'],
+        types: ['series'],
+        idPrefixes: ['tt', 'tvmaze:'],
+        catalogs: [
+          { type: 'series', id: 'search', name: 'TVmaze search', extra: [{ name: 'search', isRequired: true }] }
+        ],
         _source: 'built-in'
       }
     ];
@@ -403,11 +422,95 @@ class AddonManager {
   }
 
   async getCatalog(addonId, type, id, extra = {}, clientId) {
+    if (addonId === 'org.cvmturan.tvmaze') {
+      if (type !== 'series' || id !== 'search' || !String(extra.search || '').trim()) {
+        throw createPublicError('TVmaze search requires a series search query');
+      }
+      try {
+        return await tvmaze.search(extra.search);
+      } catch (error) {
+        throw createPublicError(`TVmaze search failed: ${error.message}`, 502);
+      }
+    }
     return this.fetchAddonResource(addonId, 'catalog', type, id, extra, 15_000, clientId);
   }
 
   async getMeta(addonId, type, id, clientId) {
+    if (addonId === 'org.cvmturan.tvmaze') {
+      if (type !== 'series') throw createPublicError('TVmaze provides series metadata only');
+      try {
+        return await tvmaze.getMeta(id);
+      } catch (error) {
+        throw createPublicError(`TVmaze metadata request failed: ${error.message}`, 502);
+      }
+    }
     return this.fetchAddonResource(addonId, 'meta', type, id, {}, 15_000, clientId);
+  }
+
+  async searchCatalogs(query, clientId) {
+    const search = String(query || '').trim();
+    if (search.length < 2) throw createPublicError('Enter at least two characters to search');
+    if (search.length > 120) throw createPublicError('Search query is too long');
+
+    const descriptors = [];
+    for (const addon of this.getAddons(clientId)) {
+      if (!addon.resources?.some((resource) =>
+        (typeof resource === 'string' ? resource : resource?.name) === 'catalog'
+      )) continue;
+
+      for (const type of ['movie', 'series']) {
+        const searchable = (addon.catalogs || []).filter((catalog) =>
+          catalog.type === type &&
+          (catalog.extra || []).some((entry) => entry?.name === 'search')
+        );
+        if (!searchable.length) continue;
+        const catalog = searchable.find((entry) => /search/i.test(entry.id)) || searchable[0];
+        descriptors.push({
+          addon: { id: addon.id, name: addon.name },
+          catalog: { id: catalog.id, name: catalog.name || 'Search' },
+          type
+        });
+      }
+    }
+
+    descriptors.sort((left, right) => {
+      const priority = (id) => id === 'org.streamflix.cinemeta'
+        ? 0
+        : id === 'org.cvmturan.tvmaze'
+          ? 1
+          : 2;
+      return priority(left.addon.id) - priority(right.addon.id);
+    });
+
+    const selected = descriptors.slice(0, MAX_SEARCH_CATALOGS);
+    const settled = await Promise.all(
+      selected.map((descriptor) => this.searchCatalog(descriptor, search, clientId))
+    );
+    return {
+      groups: settled.filter((entry) => entry.data),
+      errors: settled.filter((entry) => entry.error),
+      providers: [...new Set(settled.filter((entry) => entry.data).map((entry) => entry.addon.name))]
+    };
+  }
+
+  async searchCatalog(descriptor, search, clientId) {
+    let timer;
+    const request = this.getCatalog(
+      descriptor.addon.id,
+      descriptor.type,
+      descriptor.catalog.id,
+      { search },
+      clientId
+    ).then((data) => ({ ...descriptor, data }))
+      .catch((error) => ({ ...descriptor, error: error.message }));
+    const timeout = new Promise((resolve) => {
+      timer = setTimeout(() => resolve({ ...descriptor, error: 'Search provider timed out' }), 8_000);
+    });
+    try {
+      return await Promise.race([request, timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async getStreams(addonId, type, id, clientId) {

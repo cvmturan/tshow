@@ -11,7 +11,7 @@ It works immediately with a fresh public metadata catalog, an offline fallback, 
 - Continue Watching and My List stored only in the browser
 - “Open video” for files already on your computer; the file is never uploaded
 - Per-browser manual add-on install, list, refresh, and remove controls
-- Fresh public metadata catalog with an offline fallback when TMDB is not configured
+- Permanent Cinemeta movie/series search plus legal TVmaze series search, with an offline fallback
 - Localhost-only server, strict browser security headers, and private-network add-on URL blocking
 - No bundled torrent or piracy provider
 
@@ -62,6 +62,8 @@ https://your-provider.example/manifest.json
 Standard `stremio://host/path/manifest.json` install links are also accepted and are safely normalized to HTTPS. Cvm Turan validates every redirect destination and blocks private-network targets by default.
 
 Installed manifest URLs are saved in that browser's local storage and restored automatically after a refresh, redeploy, or Render cold start. They are isolated by a random browser identifier, so a different browser or device cannot list, use, or remove them. This is anonymous browser-level storage, not account synchronization; clearing site data removes the saved list.
+
+Search providers are separate from playback providers. Official Cinemeta movie/series search and TVmaze series search are permanent protected providers. Search also queries any browser-installed add-on that explicitly declares a search catalog. A slow or unavailable provider is skipped without hiding results returned by the others.
 
 Catalog add-ons create home-screen rows. Stream-only add-ons appear when **Play** checks a title, but do not add movie rows by themselves. Installation does not guarantee browser playback: a provider must return a declared direct MP4, WebM, or HLS URL (or an external provider page). App-only downloads, MKV files, and HTML redirects remain visible for diagnosis but are not sent blindly to the browser player.
 
