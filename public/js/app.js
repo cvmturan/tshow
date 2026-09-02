@@ -4,8 +4,12 @@
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
         continueWatching: 'streamflix:continue:v1',
-        dataSaver: 'streamflix:data-saver:v1'
+        dataSaver: 'streamflix:data-saver:v1',
+        addonURLs: 'streamflix:addons:v1',
+        addonClientId: 'streamflix:addon-client:v1'
     };
+
+    const addonClientId = loadOrCreateAddonClientId();
 
     const state = {
         trending: [],
@@ -39,6 +43,10 @@
         subtitleLibrary: [],
         subtitleObjectURL: null,
         editingAddonId: null,
+        addonURLs: loadStoredArray(STORAGE_KEYS.addonURLs)
+            .filter((value) => typeof value === 'string' && value.length <= 8192)
+            .slice(0, 20),
+        lastAddonSync: 0,
         dataSaver: false
     };
 
@@ -57,7 +65,7 @@
 
         await Promise.all([
             loadHome(),
-            loadAddons({ quiet: true })
+            initializeAddons()
         ]);
     }
 
@@ -1209,9 +1217,9 @@
         }, 800);
     }
 
-    function subtitleTrackSrc(url) {
-        const value = String(url || '');
-        return isSafeWebURL(value) ? `/api/proxy/subtitle?src=${encodeURIComponent(value)}` : value;
+    function subtitleTrackSrc(subtitle) {
+        const proxyURL = String(subtitle?.proxyUrl || '');
+        return proxyURL.startsWith('/api/proxy/subtitle?') ? proxyURL : '';
     }
 
     function subtitleOptions(activeStream) {
@@ -1290,7 +1298,12 @@
         const stream = state.streams[state.activeStreamIndex];
         const subtitle = subtitleOptions(stream)[index];
         if (!subtitle) return;
-        attachSubtitleTrack(subtitleTrackSrc(subtitle.url), subtitle.label, subtitle.lang, 'remote');
+        const source = subtitleTrackSrc(subtitle);
+        if (!source) {
+            showToast('This subtitle source could not be verified.', 'error');
+            return;
+        }
+        attachSubtitleTrack(source, subtitle.label, subtitle.lang, 'remote');
     }
 
     function srtToVtt(text) {
@@ -1900,6 +1913,51 @@
         }
     }
 
+    async function initializeAddons() {
+        try {
+            const result = await syncStoredAddons();
+            if (result.errors?.length) {
+                showToast(
+                    `${result.errors.length} saved add-on${result.errors.length === 1 ? '' : 's'} could not be restored yet.`,
+                    'warning'
+                );
+            }
+        } catch (error) {
+            showToast(error.message || 'Saved add-ons could not be restored.', 'warning');
+        }
+        await loadAddons({ quiet: true });
+    }
+
+    async function syncStoredAddons() {
+        const result = await api('/api/addons/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ manifestURLs: state.addonURLs })
+        }, { skipAddonSync: true });
+        state.lastAddonSync = Date.now();
+        return result;
+    }
+
+    function saveAddonURLs() {
+        localStorage.setItem(STORAGE_KEYS.addonURLs, JSON.stringify(state.addonURLs));
+    }
+
+    function rememberAddon(manifest, previousAddon) {
+        const previousURL = previousAddon?.isCustom ? previousAddon.manifestURL : null;
+        const nextURL = manifest?.manifestURL;
+        if (!nextURL) return;
+        state.addonURLs = state.addonURLs
+            .filter((url) => url !== previousURL && url !== nextURL);
+        state.addonURLs.push(nextURL);
+        state.addonURLs = state.addonURLs.slice(-20);
+        saveAddonURLs();
+    }
+
+    function forgetAddon(addon) {
+        state.addonURLs = state.addonURLs.filter((url) => url !== addon.manifestURL);
+        saveAddonURLs();
+    }
+
     function renderAddons() {
         const count = state.addons.length;
         elements.addonCount.textContent = pluralize(count, 'add-on');
@@ -2062,6 +2120,9 @@
             return;
         }
         const isUpdate = Boolean(state.editingAddonId);
+        const previousAddon = state.addons.find((addon) =>
+            addon.id === state.editingAddonId || addon.manifestURL === manifestURL
+        );
 
         setButtonBusy(elements.installAddonButton, true, isUpdate ? 'Updating…' : 'Installing…');
         try {
@@ -2070,6 +2131,9 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ manifestURL })
             });
+            rememberAddon(result.manifest, previousAddon || state.addons.find((addon) =>
+                addon.id === result.manifest.id
+            ));
             cancelAddonEdit();
             elements.addonForm.reset();
             await loadAddons({ quiet: true });
@@ -2095,6 +2159,7 @@
 
         try {
             await api(`/api/addons/${encodeURIComponent(addon.id)}`, { method: 'DELETE' });
+            forgetAddon(addon);
             if (state.editingAddonId === addon.id) cancelAddonEdit();
             await loadAddons({ quiet: true });
             showToast(`${addon.name} was removed.`);
@@ -2106,7 +2171,7 @@
     async function refreshAddons() {
         setButtonBusy(elements.refreshAddons, true, 'Refreshing…');
         try {
-            const result = await api('/api/addons/refresh', { method: 'POST' });
+            const result = await syncStoredAddons();
             state.addons = Array.isArray(result.addons) ? result.addons : [];
             renderAddons();
             state.addonCatalogSignature = addonCatalogSignature();
@@ -2119,7 +2184,16 @@
         }
     }
 
-    async function api(path, options = {}) {
+    async function api(path, options = {}, controls = {}) {
+        const usesCustomAddons = /^\/api\/(?:streams\/|addons\/(?:catalog|meta|streams)\/)/.test(path);
+        if (
+            !controls.skipAddonSync &&
+            usesCustomAddons &&
+            state.addonURLs.length &&
+            Date.now() - state.lastAddonSync > 10 * 60 * 1000
+        ) {
+            await syncStoredAddons();
+        }
         const controller = new AbortController();
         const timer = window.setTimeout(() => controller.abort(), 25_000);
 
@@ -2130,6 +2204,7 @@
                 credentials: 'same-origin',
                 headers: {
                     Accept: 'application/json',
+                    'X-Cvm-Client-Id': addonClientId,
                     ...(options.headers || {})
                 }
             });
@@ -2411,5 +2486,16 @@
         } catch {
             return null;
         }
+    }
+
+    function loadOrCreateAddonClientId() {
+        const saved = String(localStorage.getItem(STORAGE_KEYS.addonClientId) || '').toLowerCase();
+        if (/^[a-f0-9]{32}$/.test(saved)) return saved;
+
+        const bytes = new Uint8Array(16);
+        crypto.getRandomValues(bytes);
+        const clientId = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
+        localStorage.setItem(STORAGE_KEYS.addonClientId, clientId);
+        return clientId;
     }
 })();

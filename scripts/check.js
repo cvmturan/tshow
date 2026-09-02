@@ -35,7 +35,7 @@ for (const file of files) {
   }
 }
 
-for (const jsonFile of ['package.json', path.join('data', 'custom-addons.json')]) {
+for (const jsonFile of ['package.json']) {
   try {
     JSON.parse(fs.readFileSync(path.join(root, jsonFile), 'utf8').replace(/^\uFEFF/, ''));
   } catch (error) {

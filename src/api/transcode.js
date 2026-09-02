@@ -5,11 +5,15 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const { decodeHeaders } = require('./proxy');
+const addonManager = require('../core/addonManager');
 
 const router = express.Router();
 
 const MAX_SESSIONS = 3;
 const IDLE_MS = 3 * 60 * 1000;
+const TRANSCODE_SIGNING_KEY = Buffer.from(
+  process.env.TRANSCODE_SIGNING_SECRET || crypto.randomBytes(32).toString('hex')
+);
 
 let ffmpegPath = null;
 try {
@@ -26,13 +30,30 @@ function isAvailable() {
 }
 
 function encodePayload(params) {
-  return Buffer.from(JSON.stringify(params)).toString('base64url').slice(0, 6000);
+  const data = Buffer.from(JSON.stringify(params)).toString('base64url');
+  if (data.length > 5500) return null;
+  const signature = crypto.createHmac('sha256', TRANSCODE_SIGNING_KEY)
+    .update(data)
+    .digest('base64url');
+  return `${data}.${signature}`;
 }
 
 function decodePayload(payload) {
-  if (!payload || payload.length > 6000) return null;
+  if (!payload || payload.length > 5600) return null;
   try {
-    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    const [data, signature, extra] = String(payload).split('.');
+    if (!data || !signature || extra) return null;
+    const expected = crypto.createHmac('sha256', TRANSCODE_SIGNING_KEY)
+      .update(data)
+      .digest('base64url');
+    const actualBytes = Buffer.from(signature);
+    const expectedBytes = Buffer.from(expected);
+    if (
+      actualBytes.length !== expectedBytes.length ||
+      !crypto.timingSafeEqual(actualBytes, expectedBytes)
+    ) return null;
+
+    const parsed = JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
     if (!parsed || typeof parsed.src !== 'string' || parsed.src.length > 8192) return null;
     return { src: parsed.src, h: typeof parsed.h === 'string' ? parsed.h : null, vc: parsed.vc === 'reencode' ? 'reencode' : 'copy' };
   } catch {
@@ -43,6 +64,7 @@ function decodePayload(payload) {
 function sessionPath(params) {
   if (!isAvailable()) return null;
   const payload = encodePayload(params);
+  if (!payload) return null;
   return `/api/transcode/p/${encodeURIComponent(payload)}/index.m3u8`;
 }
 
@@ -132,6 +154,13 @@ function ensureSession(payload, callback) {
     return callback(new Error('Server-side conversion is unavailable because ffmpeg could not be loaded.'));
   }
 
+  addonManager.validateRemoteURL(params.src).then((validatedSource) => {
+    params.src = validatedSource;
+    startSession(payload, params, callback);
+  }).catch((error) => callback(error));
+}
+
+function startSession(payload, params, callback) {
   const active = Array.from(sessions.values()).filter((entry) => !entry.stopped);
   if (active.length >= MAX_SESSIONS) {
     return callback(new Error('Too many conversions are already running. Stop another video first.'));
@@ -269,5 +298,6 @@ for (const signal of ['exit', 'SIGINT', 'SIGTERM']) {
 router.sessionPath = sessionPath;
 router.isAvailable = isAvailable;
 router.buildArgs = buildArgs;
+router.decodePayload = decodePayload;
 
 module.exports = router;

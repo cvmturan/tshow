@@ -1,14 +1,15 @@
 const axios = require('axios');
 const dns = require('dns').promises;
-const fs = require('fs').promises;
 const net = require('net');
-const path = require('path');
 const sampleData = require('./sampleData');
 
 const MAX_MANIFEST_BYTES = 1024 * 1024;
 const MAX_RESOURCE_BYTES = 4 * 1024 * 1024;
 const MAX_MANIFEST_URL_LENGTH = 8_192;
 const MAX_REMOTE_REDIRECTS = 3;
+const MAX_CLIENT_ADDONS = 20;
+const MAX_CLIENT_SESSIONS = 500;
+const CLIENT_ID_PATTERN = /^[a-f0-9]{32}$/;
 
 function createPublicError(message, status = 400) {
   const error = new Error(message);
@@ -18,13 +19,9 @@ function createPublicError(message, status = 400) {
 
 class AddonManager {
   constructor() {
-    const configuredFile = process.env.CUSTOM_ADDONS_FILE || './data/custom-addons.json';
-
     this.addons = new Map();
     this.manifests = new Map();
-    this.customAddonsFile = path.isAbsolute(configuredFile)
-      ? configuredFile
-      : path.resolve(__dirname, '../..', configuredFile);
+    this.clientSessions = new Map();
     this.repositoryURL = (process.env.ADDON_REPOSITORY_URL || '').trim();
     this.cache = new Map();
     this.cacheTTL = Number.parseInt(process.env.CACHE_TTL_MS, 10) || 3_600_000;
@@ -44,7 +41,6 @@ class AddonManager {
       this.manifests.clear();
       this.builtInIds.clear();
       this.loadBuiltInAddons();
-      await this.loadCustomAddons();
       this.initialized = true;
       console.log(`Loaded ${this.addons.size} Cvm Turan add-ons`);
     })();
@@ -113,37 +109,6 @@ class AddonManager {
       this.builtInIds.add(addon.id);
       this.addons.set(addon.id, addon);
       this.manifests.set(addon.id, this.normalizeManifest(addon));
-    }
-  }
-
-  async loadCustomAddons() {
-    try {
-      const raw = await fs.readFile(this.customAddonsFile, 'utf8');
-      const customAddons = JSON.parse(raw.replace(/^\uFEFF/, ''));
-
-      if (!Array.isArray(customAddons)) {
-        throw new Error('Custom add-on file must contain an array');
-      }
-
-      for (const candidate of customAddons) {
-        try {
-          const manifest = this.validateManifest(candidate);
-          if (!candidate.manifestURL || this.builtInIds.has(manifest.id)) continue;
-          const stored = {
-            ...manifest,
-            manifestURL: candidate.manifestURL,
-            _source: 'custom'
-          };
-          this.addons.set(stored.id, stored);
-          this.manifests.set(stored.id, this.normalizeManifest(stored));
-        } catch (error) {
-          console.warn('Skipped an invalid saved add-on:', error.message);
-        }
-      }
-    } catch (error) {
-      if (error.code !== 'ENOENT') {
-        console.warn('Could not load custom add-ons:', error.message);
-      }
     }
   }
 
@@ -222,38 +187,108 @@ class AddonManager {
       throw createPublicError('Manifest must include resources and types arrays');
     }
 
+    const resources = candidate.resources.map((resource) =>
+      typeof resource === 'string' ? resource : resource?.name
+    ).filter((resource) => typeof resource === 'string')
+      .map((resource) => resource.slice(0, 80))
+      .slice(0, 30);
+    const catalogs = Array.isArray(candidate.catalogs)
+      ? candidate.catalogs.filter((catalog) => catalog && catalog.type && catalog.id)
+          .slice(0, 100)
+          .map((catalog) => ({
+            type: String(catalog.type).slice(0, 40),
+            id: String(catalog.id).slice(0, 120),
+            name: String(catalog.name || catalog.id).slice(0, 120),
+            genres: Array.isArray(catalog.genres)
+              ? catalog.genres.map(String).map((value) => value.slice(0, 80)).slice(0, 100)
+              : [],
+            extra: Array.isArray(catalog.extra)
+              ? catalog.extra.filter((entry) => entry && typeof entry.name === 'string')
+                  .slice(0, 30)
+                  .map((entry) => ({
+                    name: entry.name.slice(0, 80),
+                    isRequired: entry.isRequired === true,
+                    options: Array.isArray(entry.options)
+                      ? entry.options.map(String).map((value) => value.slice(0, 120)).slice(0, 100)
+                      : []
+                  }))
+              : []
+          }))
+      : [];
+    const behaviorHints = candidate.behaviorHints && typeof candidate.behaviorHints === 'object'
+      ? candidate.behaviorHints
+      : {};
+
     return {
-      ...candidate,
       id,
       name,
       version: String(candidate.version || '1.0.0').slice(0, 40),
       description: String(candidate.description || '').slice(0, 500),
-      resources: candidate.resources.slice(0, 30),
-      types: candidate.types.map(String).slice(0, 30),
+      resources,
+      types: candidate.types.map(String).map((value) => value.slice(0, 40)).slice(0, 30),
       idPrefixes: Array.isArray(candidate.idPrefixes)
-        ? candidate.idPrefixes.map(String).slice(0, 50)
+        ? candidate.idPrefixes.map(String).map((value) => value.slice(0, 80)).slice(0, 50)
         : [],
-      catalogs: Array.isArray(candidate.catalogs) ? candidate.catalogs.slice(0, 100) : []
+      catalogs,
+      logo: typeof candidate.logo === 'string' ? candidate.logo.slice(0, 4000) : null,
+      behaviorHints: {
+        configurable: behaviorHints.configurable === true,
+        configurationRequired: behaviorHints.configurationRequired === true
+      }
     };
   }
 
-  getAddons() {
-    return Array.from(this.addons.values());
+  normalizeClientId(value) {
+    const clientId = String(value || '').trim().toLowerCase();
+    return CLIENT_ID_PATTERN.test(clientId) ? clientId : null;
   }
 
-  getManifests() {
-    return Array.from(this.manifests.values());
+  requireClientId(value) {
+    const clientId = this.normalizeClientId(value);
+    if (!clientId) throw createPublicError('A valid browser add-on ID is required');
+    return clientId;
   }
 
-  getManifest(id) {
-    return this.manifests.get(id);
+  getClientSession(clientId, create = false) {
+    const key = this.normalizeClientId(clientId);
+    if (!key) return null;
+    let session = this.clientSessions.get(key);
+    if (!session && create) {
+      if (this.clientSessions.size >= MAX_CLIENT_SESSIONS) {
+        const oldest = [...this.clientSessions.entries()]
+          .sort((left, right) => left[1].lastAccess - right[1].lastAccess)[0];
+        if (oldest) this.clientSessions.delete(oldest[0]);
+      }
+      session = { addons: new Map(), manifests: new Map(), lastAccess: Date.now() };
+      this.clientSessions.set(key, session);
+    }
+    if (session) session.lastAccess = Date.now();
+    return session;
   }
 
-  getAddon(id) {
-    return this.addons.get(id);
+  getAddons(clientId) {
+    const custom = this.getClientSession(clientId)?.addons || new Map();
+    return [...this.addons.values(), ...custom.values()];
   }
 
-  async installAddon(manifestURL) {
+  getAddonIds(clientId) {
+    return this.getAddons(clientId).map((addon) => addon.id);
+  }
+
+  getManifests(clientId) {
+    const custom = this.getClientSession(clientId)?.manifests || new Map();
+    return [...this.manifests.values(), ...custom.values()];
+  }
+
+  getManifest(id, clientId) {
+    return this.manifests.get(id) || this.getClientSession(clientId)?.manifests.get(id);
+  }
+
+  getAddon(id, clientId) {
+    return this.addons.get(id) || this.getClientSession(clientId)?.addons.get(id);
+  }
+
+  async fetchAddonManifest(manifestURL) {
     const normalizedURL = this.normalizeManifestURL(manifestURL);
     const safeURL = await this.validateRemoteURL(normalizedURL);
     const response = await this.fetchRemoteJSON(safeURL, {
@@ -267,85 +302,73 @@ class AddonManager {
       throw createPublicError('That manifest id is reserved by Cvm Turan');
     }
 
-    const stored = {
+    return {
       ...manifest,
       manifestURL: response.finalURL,
       _source: 'custom'
     };
+  }
 
-    const previousAddon = this.addons.get(stored.id);
-    const previousManifest = this.manifests.get(stored.id);
-    this.addons.set(stored.id, stored);
-    this.manifests.set(stored.id, this.normalizeManifest(stored));
-    try {
-      await this.saveCustomAddons();
-    } catch (error) {
-      this.restoreMapEntry(this.addons, stored.id, previousAddon);
-      this.restoreMapEntry(this.manifests, stored.id, previousManifest);
-      throw createPublicError(
-        `The manifest was valid, but Cvm Turan could not save it: ${error.message}`,
-        500
-      );
+  async installAddon(manifestURL, clientId) {
+    const key = this.requireClientId(clientId);
+    const session = this.getClientSession(key, true);
+    const stored = await this.fetchAddonManifest(manifestURL);
+
+    if (!session.addons.has(stored.id) && session.addons.size >= MAX_CLIENT_ADDONS) {
+      throw createPublicError(`A browser can install up to ${MAX_CLIENT_ADDONS} add-ons`);
     }
+
+    session.addons.set(stored.id, stored);
+    session.manifests.set(stored.id, this.normalizeManifest(stored));
     this.clearCache();
 
     return this.normalizeManifest(stored);
   }
 
-  async uninstallAddon(id) {
-    const addon = this.addons.get(id);
-    if (!addon) return { removed: false, reason: 'not-found' };
-    if (addon._source !== 'custom') return { removed: false, reason: 'built-in' };
-
-    const previousManifest = this.manifests.get(id);
-    this.addons.delete(id);
-    this.manifests.delete(id);
-    try {
-      await this.saveCustomAddons();
-    } catch (error) {
-      this.addons.set(id, addon);
-      if (previousManifest) this.manifests.set(id, previousManifest);
-      throw createPublicError(
-        `Cvm Turan could not save the updated add-on list: ${error.message}`,
-        500
-      );
+  async syncAddons(manifestURLs, clientId) {
+    const key = this.requireClientId(clientId);
+    if (!Array.isArray(manifestURLs)) {
+      throw createPublicError('manifestURLs must be an array');
     }
+    const urls = [...new Set(manifestURLs
+      .filter((value) => typeof value === 'string')
+      .map((value) => value.trim())
+      .filter(Boolean))];
+    if (urls.length > MAX_CLIENT_ADDONS) {
+      throw createPublicError(`A browser can restore up to ${MAX_CLIENT_ADDONS} add-ons`);
+    }
+
+    const session = this.getClientSession(key, true);
+    const addons = new Map();
+    const manifests = new Map();
+    const errors = [];
+
+    for (const manifestURL of urls) {
+      try {
+        const stored = await this.fetchAddonManifest(manifestURL);
+        addons.set(stored.id, stored);
+        manifests.set(stored.id, this.normalizeManifest(stored));
+      } catch (error) {
+        errors.push({ manifestURL, error: error.message });
+      }
+    }
+
+    session.addons = addons;
+    session.manifests = manifests;
+    session.lastAccess = Date.now();
+    this.clearCache();
+    return { addons: this.getManifests(key), errors };
+  }
+
+  async uninstallAddon(id, clientId) {
+    const session = this.getClientSession(clientId);
+    const addon = session?.addons.get(id);
+    if (!addon) return { removed: false, reason: 'not-found' };
+
+    session.addons.delete(id);
+    session.manifests.delete(id);
     this.clearCache();
     return { removed: true };
-  }
-
-  async saveCustomAddons() {
-    const customAddons = Array.from(this.addons.values())
-      .filter((addon) => addon._source === 'custom')
-      .map(({ _source, ...addon }) => addon);
-    const payload = `${JSON.stringify(customAddons, null, 2)}\n`;
-    const task = this.saveQueue
-      .catch(() => undefined)
-      .then(() => this.writeCustomAddonsAtomically(payload));
-    this.saveQueue = task;
-    return task;
-  }
-
-  async writeCustomAddonsAtomically(payload) {
-    await fs.mkdir(path.dirname(this.customAddonsFile), { recursive: true });
-    this.saveSequence += 1;
-    const temporaryFile = path.join(
-      path.dirname(this.customAddonsFile),
-      `.${path.basename(this.customAddonsFile)}.${process.pid}.${this.saveSequence}.tmp`
-    );
-
-    try {
-      await fs.writeFile(temporaryFile, payload, { encoding: 'utf8', flag: 'wx' });
-      await fs.rename(temporaryFile, this.customAddonsFile);
-    } catch (error) {
-      await fs.unlink(temporaryFile).catch(() => undefined);
-      throw error;
-    }
-  }
-
-  restoreMapEntry(map, id, previousValue) {
-    if (previousValue === undefined) map.delete(id);
-    else map.set(id, previousValue);
   }
 
   normalizeManifestURL(value) {
@@ -356,24 +379,15 @@ class AddonManager {
     return raw;
   }
 
-  async refresh() {
-    const customIds = Array.from(this.addons.values())
-      .filter((addon) => addon._source === 'custom')
-      .map((addon) => addon.id);
-
-    for (const id of customIds) {
-      this.addons.delete(id);
-      this.manifests.delete(id);
-    }
-
-    await this.loadCustomAddons();
-    this.clearCache();
-    return this.getManifests();
+  async refresh(clientId) {
+    const urls = [...(this.getClientSession(clientId)?.addons.values() || [])]
+      .map((addon) => addon.manifestURL);
+    return this.syncAddons(urls, clientId);
   }
 
-  getCatalogs(type) {
+  getCatalogs(type, clientId) {
     const catalogs = [];
-    for (const addon of this.addons.values()) {
+    for (const addon of this.getAddons(clientId)) {
       if (!addon.types?.includes(type) || !Array.isArray(addon.catalogs)) continue;
       for (const catalog of addon.catalogs) {
         if (catalog.type === type) {
@@ -388,15 +402,15 @@ class AddonManager {
     return catalogs;
   }
 
-  async getCatalog(addonId, type, id, extra = {}) {
-    return this.fetchAddonResource(addonId, 'catalog', type, id, extra, 15_000);
+  async getCatalog(addonId, type, id, extra = {}, clientId) {
+    return this.fetchAddonResource(addonId, 'catalog', type, id, extra, 15_000, clientId);
   }
 
-  async getMeta(addonId, type, id) {
-    return this.fetchAddonResource(addonId, 'meta', type, id, {}, 15_000);
+  async getMeta(addonId, type, id, clientId) {
+    return this.fetchAddonResource(addonId, 'meta', type, id, {}, 15_000, clientId);
   }
 
-  async getStreams(addonId, type, id) {
+  async getStreams(addonId, type, id, clientId) {
     if (addonId === 'org.streamflix.open-samples') {
       const sample = sampleData.getStream();
       return {
@@ -410,15 +424,15 @@ class AddonManager {
       };
     }
 
-    return this.fetchAddonResource(addonId, 'stream', type, id, {}, 20_000);
+    return this.fetchAddonResource(addonId, 'stream', type, id, {}, 20_000, clientId);
   }
 
-  async fetchAddonResource(addonId, resource, type, id, extra, timeout) {
-    const cacheKey = `${resource}:${addonId}:${type}:${id}:${JSON.stringify(extra)}`;
+  async fetchAddonResource(addonId, resource, type, id, extra, timeout, clientId) {
+    const cacheKey = `${clientId || 'public'}:${resource}:${addonId}:${type}:${id}:${JSON.stringify(extra)}`;
     const cached = this.getFromCache(cacheKey);
     if (cached) return cached;
 
-    const addon = this.addons.get(addonId);
+    const addon = this.getAddon(addonId, clientId);
     if (!addon || !addon.manifestURL) {
       throw createPublicError('Add-on is unavailable or does not provide a remote endpoint', 404);
     }

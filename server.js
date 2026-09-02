@@ -19,6 +19,9 @@ function createApp() {
   const app = express();
 
   app.disable('x-powered-by');
+  // Render terminates HTTPS at a single reverse proxy. Trust that hop so
+  // express-rate-limit uses the real client IP from X-Forwarded-For.
+  if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1);
   app.use(helmet({
     crossOriginEmbedderPolicy: false,
     crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -44,8 +47,15 @@ function createApp() {
   app.use(compression());
   app.use(express.json({ limit: '256kb', type: 'application/json' }));
 
-  app.use('/api/transcode', transcodeRoutes);
-  app.use('/api/proxy', proxyRoutes);
+  const mediaLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 3000,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'Too many media requests. Please try again shortly.' }
+  });
+  app.use('/api/transcode', mediaLimiter, transcodeRoutes);
+  app.use('/api/proxy', mediaLimiter, proxyRoutes);
 
   const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,

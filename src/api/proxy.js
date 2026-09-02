@@ -1,8 +1,10 @@
 const express = require('express');
 const axios = require('axios');
 const addonManager = require('../core/addonManager');
+const requestSigner = require('../core/requestSigner');
 
 const router = express.Router();
+const MAX_PROXY_REDIRECTS = 3;
 
 const HEADER_ALLOWLIST = new Set([
   'referer', 'origin', 'user-agent', 'accept', 'accept-language', 'cookie', 'authorization'
@@ -34,7 +36,41 @@ function decodeHeaders(raw) {
   }
 }
 
+async function fetchValidatedRemote(startURL, options) {
+  let currentURL = await addonManager.validateRemoteURL(startURL);
+
+  for (let redirectCount = 0; redirectCount <= MAX_PROXY_REDIRECTS; redirectCount += 1) {
+    const response = await axios.get(currentURL, {
+      ...options,
+      maxRedirects: 0,
+      validateStatus: (status) => status >= 200 && status < 400
+    });
+    if (response.status < 300) return response;
+
+    response.data?.destroy?.();
+    const location = response.headers?.location;
+    if (!location || redirectCount >= MAX_PROXY_REDIRECTS) {
+      throw new Error('The media provider returned too many redirects.');
+    }
+
+    const nextURL = new URL(location, currentURL).toString();
+    const validatedNextURL = await addonManager.validateRemoteURL(nextURL);
+    if (
+      new URL(currentURL).protocol === 'https:' &&
+      new URL(validatedNextURL).protocol !== 'https:'
+    ) {
+      throw new Error('The media provider attempted an insecure redirect.');
+    }
+    currentURL = validatedNextURL;
+  }
+
+  throw new Error('The media provider returned too many redirects.');
+}
+
 router.get('/stream', async (req, res) => {
+  if (!requestSigner.verify(req.query.sig, req.query.src, req.query.h)) {
+    return res.status(403).json({ error: 'Invalid or expired media proxy link.' });
+  }
   let source;
   try {
     source = await addonManager.validateRemoteURL(String(req.query.src || ''));
@@ -45,13 +81,11 @@ router.get('/stream', async (req, res) => {
   const extraHeaders = decodeHeaders(req.query.h);
   let upstream;
   try {
-    upstream = await axios.get(source, {
+    upstream = await fetchValidatedRemote(source, {
       responseType: 'stream',
       timeout: 30_000,
-      maxRedirects: 5,
       maxContentLength: Infinity,
       decompress: false,
-      validateStatus: (status) => status >= 200 && status < 400,
       headers: {
         ...extraHeaders,
         Accept: '*/*',
@@ -90,6 +124,9 @@ function srtToVtt(text) {
 }
 
 router.get('/subtitle', async (req, res) => {
+  if (!requestSigner.verify(req.query.sig, req.query.src)) {
+    return res.status(403).json({ error: 'Invalid or expired subtitle proxy link.' });
+  }
   let source;
   try {
     source = await addonManager.validateRemoteURL(String(req.query.src || ''));
@@ -99,12 +136,10 @@ router.get('/subtitle', async (req, res) => {
 
   let response;
   try {
-    response = await axios.get(source, {
+    response = await fetchValidatedRemote(source, {
       responseType: 'arraybuffer',
       timeout: 30_000,
-      maxRedirects: 5,
       maxContentLength: 8 * 1024 * 1024,
-      validateStatus: (status) => status >= 200 && status < 400,
       headers: { ...decodeHeaders(req.query.h), Accept: '*/*' }
     });
   } catch (error) {
@@ -123,5 +158,6 @@ router.get('/subtitle', async (req, res) => {
 });
 
 router.decodeHeaders = decodeHeaders;
+router.fetchValidatedRemote = fetchValidatedRemote;
 
 module.exports = router;

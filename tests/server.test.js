@@ -1,21 +1,19 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const http = require('node:http');
-const os = require('node:os');
 const path = require('node:path');
 const { after, before, test } = require('node:test');
 
-const testAddonFile = path.join(os.tmpdir(), `streamflix-addons-${process.pid}.json`);
-fs.writeFileSync(testAddonFile, '[]', 'utf8');
+const TEST_CLIENT_A = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const TEST_CLIENT_B = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
 process.env.NODE_ENV = 'test';
 process.env.HOST = '127.0.0.1';
 process.env.TMDB_API_KEY = '';
 process.env.ADDON_REPOSITORY_URL = '';
-process.env.CUSTOM_ADDONS_FILE = testAddonFile;
 process.env.ALLOW_PRIVATE_ADDONS = 'false';
+process.env.TRUST_PROXY = '1';
 
-const { startServer } = require('../server');
+const { createApp, startServer } = require('../server');
 const streamRouter = require('../src/api/streams');
 const transcodeRouter = require('../src/api/transcode');
 const addonManager = require('../src/core/addonManager');
@@ -35,14 +33,23 @@ after(async () => {
       server.close((error) => error ? reject(error) : resolve());
     });
   }
-  fs.rmSync(testAddonFile, { force: true });
 });
 
-async function getJSON(route, options) {
-  const response = await fetch(`${baseURL}${route}`, options);
+async function getJSON(route, options = {}) {
+  const response = await fetch(`${baseURL}${route}`, {
+    ...options,
+    headers: {
+      'X-Cvm-Client-Id': TEST_CLIENT_A,
+      ...(options.headers || {})
+    }
+  });
   const data = await response.json();
   return { response, data };
 }
+
+test('trusted proxy hop can be enabled for hosted deployments', () => {
+  assert.equal(createApp().get('trust proxy'), 1);
+});
 
 test('mobile HLS playlists use a client-reachable relative init segment', () => {
   const args = transcodeRouter.buildArgs({
@@ -55,6 +62,14 @@ test('mobile HLS playlists use a client-reachable relative init segment', () => 
   assert.ok(!path.isAbsolute(args[optionIndex + 1]));
 });
 
+test('forged unsigned transcode payloads are rejected', () => {
+  const unsigned = Buffer.from(JSON.stringify({
+    src: 'http://127.0.0.1/private',
+    vc: 'copy'
+  })).toString('base64url');
+  assert.equal(transcodeRouter.decodePayload(unsigned), null);
+});
+
 test('health endpoint reports a ready local server', async () => {
   const { response, data } = await getJSON('/api/health');
   assert.equal(response.status, 200);
@@ -62,6 +77,20 @@ test('health endpoint reports a ready local server', async () => {
   assert.equal(data.version, '1.1.0');
   assert.equal(data.hostScope, 'local');
   assert.equal(data.tmdbConfigured, false);
+});
+
+test('debrid account routes are disabled without a server access key', async () => {
+  const { response, data } = await getJSON('/api/debrid/services');
+  assert.equal(response.status, 403);
+  assert.match(data.error, /disabled/i);
+});
+
+test('media proxy rejects links that were not issued by the server', async () => {
+  const { response, data } = await getJSON(
+    `/api/proxy/stream?src=${encodeURIComponent('https://media.example.test/video.mp4')}`
+  );
+  assert.equal(response.status, 403);
+  assert.match(data.error, /invalid|expired/i);
 });
 
 test('catalog falls back to useful offline sample data', async () => {
@@ -294,8 +323,13 @@ test('a lawful local Stremio fixture serves catalogs, episode metadata, and orde
     assert.equal(install.data.manifest.behaviorHints.configurable, true);
     assert.equal(install.data.manifest.behaviorHints.configurationRequired, true);
     assert.match(install.data.manifest.manifestURL, /\/final\/manifest\.json$/);
-    const savedAfterInstall = JSON.parse(fs.readFileSync(testAddonFile, 'utf8'));
-    assert.ok(savedAfterInstall.some((addon) => addon.id === manifest.id));
+
+    const addonsForA = await getJSON('/api/addons');
+    assert.ok(addonsForA.data.addons.some((addon) => addon.id === manifest.id));
+    const addonsForB = await getJSON('/api/addons', {
+      headers: { 'X-Cvm-Client-Id': TEST_CLIENT_B }
+    });
+    assert.ok(!addonsForB.data.addons.some((addon) => addon.id === manifest.id));
 
     const catalog = await getJSON(
       `/api/addons/catalog/${manifest.id}/movie/safe-movies?skip=20`
@@ -329,28 +363,30 @@ test('a lawful local Stremio fixture serves catalogs, episode metadata, and orde
     assert.ok(archiveIndex > externalIndex);
     assert.equal(streams.data.streams[archiveIndex].browserReady, false);
 
+    const otherBrowserRemoval = await getJSON(`/api/addons/${manifest.id}`, {
+      method: 'DELETE',
+      headers: { 'X-Cvm-Client-Id': TEST_CLIENT_B }
+    });
+    assert.equal(otherBrowserRemoval.response.status, 404);
+    const stillInstalledForA = await getJSON('/api/addons');
+    assert.ok(stillInstalledForA.data.addons.some((addon) => addon.id === manifest.id));
+
+    const savedManifestURL = install.data.manifest.manifestURL;
+    addonManager.clientSessions.delete(TEST_CLIENT_A);
+    const afterServerRestart = await getJSON('/api/addons');
+    assert.ok(!afterServerRestart.data.addons.some((addon) => addon.id === manifest.id));
+    const restored = await getJSON('/api/addons/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manifestURLs: [savedManifestURL] })
+    });
+    assert.equal(restored.response.status, 200);
+    assert.ok(restored.data.addons.some((addon) => addon.id === manifest.id));
+
     const removal = await getJSON(`/api/addons/${manifest.id}`, { method: 'DELETE' });
     assert.equal(removal.response.status, 200);
-    const savedAfterRemoval = JSON.parse(fs.readFileSync(testAddonFile, 'utf8'));
-    assert.ok(!savedAfterRemoval.some((addon) => addon.id === manifest.id));
-
-    const originalAddonFile = addonManager.customAddonsFile;
-    addonManager.customAddonsFile = path.join(testAddonFile, 'cannot-write.json');
-    try {
-      const failedSave = await getJSON('/api/addons/install', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          manifestURL: `http://127.0.0.1:${fixturePort}/manifest.json`
-        })
-      });
-      assert.equal(failedSave.response.status, 500);
-      assert.match(failedSave.data.error, /could not save/i);
-      const addonsAfterFailedSave = await getJSON('/api/addons');
-      assert.ok(!addonsAfterFailedSave.data.addons.some((addon) => addon.id === manifest.id));
-    } finally {
-      addonManager.customAddonsFile = originalAddonFile;
-    }
+    const addonsAfterRemoval = await getJSON('/api/addons');
+    assert.ok(!addonsAfterRemoval.data.addons.some((addon) => addon.id === manifest.id));
   } finally {
     process.env.ALLOW_PRIVATE_ADDONS = 'false';
     await new Promise((resolve) => fixtureServer.close(resolve));

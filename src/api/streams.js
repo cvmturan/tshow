@@ -1,9 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const addonManager = require('../core/addonManager');
+const requestSigner = require('../core/requestSigner');
 const transcode = require('./transcode');
 
 const SAMPLE_ADDON_ID = 'org.streamflix.open-samples';
+
+function clientId(req) {
+  return addonManager.normalizeClientId(req.get('x-cvm-client-id'));
+}
 
 function normalizeType(type) {
   return type === 'tv' ? 'series' : type;
@@ -132,6 +137,7 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0) {
     } else {
       const params = new URLSearchParams({ src: sourceURL });
       if (headerPayload) params.set('h', headerPayload);
+      params.set('sig', requestSigner.signatureFor(sourceURL, headerPayload));
       playUrl = `/api/proxy/stream?${params.toString()}`;
     }
     if (playbackMode !== 'hls') {
@@ -188,13 +194,34 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0) {
     requiresHeaders: Boolean(headerPayload),
     notWebReady,
     unsupportedReason: unsupportedReason || null,
-    subtitles: Array.isArray(stream.subtitles) ? stream.subtitles.slice(0, 30) : [],
+    subtitles: normalizeSubtitles(stream.subtitles),
     behaviorHints,
     isDemo: addonId === SAMPLE_ADDON_ID,
     sourceAddon: addonId,
     sourceAddonName: addonName || addonId,
     _originalIndex: originalIndex
   };
+}
+
+function normalizeSubtitles(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((subtitle) =>
+    subtitle && typeof subtitle.url === 'string' && safeWebURL(subtitle.url)
+  ).slice(0, 30).map((subtitle) => ({
+    id: String(subtitle.id || subtitle.url).slice(0, 200),
+    url: subtitle.url,
+    proxyUrl: subtitleProxyURL(subtitle.url),
+    lang: String(subtitle.lang || '').slice(0, 12),
+    label: String(subtitle.label || '').slice(0, 60)
+  }));
+}
+
+function subtitleProxyURL(url) {
+  const params = new URLSearchParams({
+    src: url,
+    sig: requestSigner.signatureFor(url)
+  });
+  return `/api/proxy/subtitle?${params.toString()}`;
 }
 
 const SIZE_UNITS = { kb: 1024, mb: 1024 ** 2, gb: 1024 ** 3, tb: 1024 ** 4 };
@@ -260,13 +287,13 @@ function supportsRequest(manifest, type, id) {
   return true;
 }
 
-async function collectStreams(type, id, addonIds) {
+async function collectStreams(type, id, addonIds, browserId) {
   const normalizedType = normalizeType(type);
-  const knownIds = new Set(addonManager.addons.keys());
+  const knownIds = new Set(addonManager.getAddonIds(browserId));
   const selectedIds = addonIds?.length
     ? addonIds.filter((addonId) => knownIds.has(addonId))
     : Array.from(knownIds).filter((addonId) =>
-        supportsRequest(addonManager.getManifest(addonId), normalizedType, id)
+        supportsRequest(addonManager.getManifest(addonId, browserId), normalizedType, id)
       );
 
   selectedIds.sort((left, right) => {
@@ -276,9 +303,9 @@ async function collectStreams(type, id, addonIds) {
   });
 
   const sourceResults = await Promise.all(selectedIds.slice(0, 20).map(async (addonId) => {
-    const addonName = addonManager.getManifest(addonId)?.name || addonId;
+    const addonName = addonManager.getManifest(addonId, browserId)?.name || addonId;
     try {
-      const result = await addonManager.getStreams(addonId, normalizedType, id);
+      const result = await addonManager.getStreams(addonId, normalizedType, id, browserId);
       const rawStreams = Array.isArray(result.streams) ? result.streams : [];
       const streams = rawStreams
         .map((stream, index) => normalizeStream(stream, addonId, addonName, index))
@@ -319,7 +346,7 @@ router.get('/play/:type/:id', async (req, res) => {
     const { type, id } = req.params;
     const streamIndex = Math.max(0, Number.parseInt(req.query.streamIndex, 10) || 0);
     const addonIds = req.query.addonId ? [String(req.query.addonId)] : null;
-    const { streams } = await collectStreams(type, id, addonIds);
+    const { streams } = await collectStreams(type, id, addonIds, clientId(req));
     const selected = streams[streamIndex];
 
     if (!selected) {
@@ -340,14 +367,15 @@ router.get('/subtitles/:type/:id', async (req, res) => {
       return res.status(400).json({ error: 'Type must be movie or series' });
     }
 
-    const providerIds = Array.from(addonManager.addons.keys())
-      .filter((addonId) => addonManager.getManifest(addonId)?.resources?.includes('subtitles'))
+    const browserId = clientId(req);
+    const providerIds = addonManager.getAddonIds(browserId)
+      .filter((addonId) => addonManager.getManifest(addonId, browserId)?.resources?.includes('subtitles'))
       .slice(0, 6);
 
     const results = await Promise.all(providerIds.map(async (addonId) => {
-      const name = addonManager.getManifest(addonId)?.name || addonId;
+      const name = addonManager.getManifest(addonId, browserId)?.name || addonId;
       try {
-        const data = await addonManager.fetchAddonResource(addonId, 'subtitles', normalizedType, id, {}, 15_000);
+        const data = await addonManager.fetchAddonResource(addonId, 'subtitles', normalizedType, id, {}, 15_000, browserId);
         const raw = Array.isArray(data?.subtitles) ? data.subtitles : [];
         return {
           addonId,
@@ -374,6 +402,7 @@ router.get('/subtitles/:type/:id', async (req, res) => {
         subtitles.push({
           id: String(subtitle.id || subtitle.url).slice(0, 200),
           url: subtitle.url,
+          proxyUrl: subtitleProxyURL(subtitle.url),
           lang: String(subtitle.lang || '').slice(0, 12),
           label: String(subtitle.label || '').slice(0, 60),
           provider: provider.name
@@ -405,7 +434,7 @@ router.get('/:type/:id', async (req, res) => {
       ? String(req.query.addonIds).split(',').map((value) => value.trim()).filter(Boolean)
       : null;
 
-    const { streams, sources } = await collectStreams(type, id, addonIds);
+    const { streams, sources } = await collectStreams(type, id, addonIds, clientId(req));
     res.json({ streams, sources, count: streams.length });
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
