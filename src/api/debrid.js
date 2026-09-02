@@ -1,6 +1,24 @@
+const crypto = require('crypto');
 const express = require('express');
 const router = express.Router();
 const debridManager = require('../core/debrid');
+
+router.use((req, res, next) => {
+  const expected = process.env.DEBRID_API_ACCESS_KEY;
+  const provided = req.get('x-cvm-debrid-key') || '';
+  if (!expected || expected.length < 24) {
+    return res.status(403).json({ error: 'Debrid API access is disabled on this server.' });
+  }
+  const expectedBytes = Buffer.from(expected);
+  const providedBytes = Buffer.from(provided);
+  if (
+    expectedBytes.length !== providedBytes.length ||
+    !crypto.timingSafeEqual(expectedBytes, providedBytes)
+  ) {
+    return res.status(401).json({ error: 'Debrid API access denied.' });
+  }
+  return next();
+});
 
 router.get('/services', async (req, res) => {
   try {
