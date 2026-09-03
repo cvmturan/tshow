@@ -24,6 +24,30 @@ function safeWebURL(value) {
   }
 }
 
+function safeMagnetURL(value) {
+  if (typeof value !== 'string' || value.length > 8_000) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'magnet:') return null;
+    const exactTopic = String(url.searchParams.get('xt') || '');
+    return /^urn:btih:(?:[a-f0-9]{40}|[a-z2-7]{32})$/i.test(exactTopic) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+function externalAppURL(stream) {
+  const supplied = safeMagnetURL(stream.url);
+  if (supplied) return supplied.href;
+
+  const infoHash = String(stream.infoHash || '').trim();
+  if (!/^(?:[a-f0-9]{40}|[a-z2-7]{32})$/i.test(infoHash)) return null;
+  const params = new URLSearchParams({ xt: `urn:btih:${infoHash}` });
+  const displayName = String(stream.name || stream.title || '').trim().slice(0, 240);
+  if (displayName) params.set('dn', displayName);
+  return `magnet:?${params.toString()}`;
+}
+
 function formatFromToken(value) {
   const token = String(value || '').trim().toLowerCase().split(';')[0];
   if (!token) return '';
@@ -75,11 +99,13 @@ function inferFormat(stream, url) {
   return unsafe || declaredFormats[0] || filename || pathname;
 }
 
-function normalizeStream(stream, addonId, addonName, originalIndex = 0) {
+function normalizeStream(stream, addonId, addonName, originalIndex = 0, options = {}) {
   if (!stream || typeof stream !== 'object') return null;
 
   const parsedURL = safeWebURL(stream.url);
   const parsedExternalURL = safeWebURL(stream.externalUrl);
+  const appURL = externalAppURL(stream);
+  const externalOnly = options.externalOnly === true;
   const ytId = typeof stream.ytId === 'string' && /^[a-zA-Z0-9_-]{6,20}$/.test(stream.ytId)
     ? stream.ytId
     : null;
@@ -102,7 +128,12 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0) {
   let playbackMode = 'unsupported';
   let unsupportedReason = '';
 
-  if (sourceURL) {
+  if (externalOnly && sourceURL) {
+    playbackMode = 'external-player';
+    unsupportedReason = headerPayload
+      ? 'This source requires provider-specific headers and may not work in every external player.'
+      : 'User-installed sources open directly on this device and are never relayed through Cvm Turan.';
+  } else if (sourceURL) {
     if (notWebReady && format === 'archive') {
       unsupportedReason = 'Archive and download-pack sources cannot be played in the browser.';
     } else if (format === 'html') {
@@ -117,8 +148,11 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0) {
           ? 'direct'
           : 'proxy';
     }
-  } else if (stream.infoHash || stream.fileIdx !== undefined) {
-    unsupportedReason = 'Torrent sources are outside this browser-safe player.';
+  } else if (appURL || stream.infoHash || stream.fileIdx !== undefined) {
+    playbackMode = appURL ? 'external-app' : 'unsupported';
+    unsupportedReason = appURL
+      ? 'Torrent source available to an external app. Cvm Turan does not download, proxy, or transcode it.'
+      : 'This torrent source did not include a valid magnet link or info hash.';
   } else if (
     Array.isArray(stream.zipUrls) ||
     Array.isArray(stream.rarUrls) ||
@@ -131,7 +165,7 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0) {
   let playUrl = null;
   let transcodeUrl = null;
   let transcodeLowUrl = null;
-  if (browserReady && sourceURL) {
+  if (!externalOnly && browserReady && sourceURL) {
     if (playbackMode === 'direct') {
       playUrl = sourceURL;
     } else {
@@ -163,11 +197,12 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0) {
     unsupportedReason = '';
   }
 
-  if (!browserReady && !externalUrl && !unsupportedReason) return null;
+  if (!browserReady && !externalUrl && !sourceURL && !appURL && !unsupportedReason) return null;
 
   return {
     url: playUrl,
     externalPlayerUrl: sourceURL,
+    externalAppUrl: appURL,
     attemptUrl: null,
     transcodeUrl,
     transcodeLowUrl,
@@ -194,7 +229,7 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0) {
     requiresHeaders: Boolean(headerPayload),
     notWebReady,
     unsupportedReason: unsupportedReason || null,
-    subtitles: normalizeSubtitles(stream.subtitles),
+    subtitles: externalOnly ? [] : normalizeSubtitles(stream.subtitles),
     behaviorHints,
     isDemo: addonId === SAMPLE_ADDON_ID,
     sourceAddon: addonId,
@@ -261,7 +296,9 @@ function readinessScore(stream) {
     const modeBonus = stream.playbackMode === 'direct' ? 60 : stream.playbackMode === 'hls' ? 30 : 0;
     return (stream.isDemo ? 400 : 500) + modeBonus;
   }
-  if (stream.externalUrl) return stream.playbackMode === 'youtube' ? 350 : 300;
+  if (stream.externalUrl || stream.externalPlayerUrl || stream.externalAppUrl) {
+    return stream.playbackMode === 'youtube' ? 350 : 300;
+  }
   return 0;
 }
 
@@ -270,8 +307,8 @@ function compareStreams(left, right) {
   if (readiness) return readiness;
   const quality = qualityScore(right) - qualityScore(left);
   if (quality) return quality;
-  const secure = Number(String(right.url || right.externalUrl || '').startsWith('https:')) -
-    Number(String(left.url || left.externalUrl || '').startsWith('https:'));
+  const secure = Number(String(right.url || right.externalPlayerUrl || right.externalUrl || '').startsWith('https:')) -
+    Number(String(left.url || left.externalPlayerUrl || left.externalUrl || '').startsWith('https:'));
   if (secure) return secure;
   const source = String(left.sourceAddon).localeCompare(String(right.sourceAddon));
   if (source) return source;
@@ -303,12 +340,15 @@ async function collectStreams(type, id, addonIds, browserId) {
   });
 
   const sourceResults = await Promise.all(selectedIds.slice(0, 20).map(async (addonId) => {
-    const addonName = addonManager.getManifest(addonId, browserId)?.name || addonId;
+    const manifest = addonManager.getManifest(addonId, browserId);
+    const addonName = manifest?.name || addonId;
     try {
       const result = await addonManager.getStreams(addonId, normalizedType, id, browserId);
       const rawStreams = Array.isArray(result.streams) ? result.streams : [];
       const streams = rawStreams
-        .map((stream, index) => normalizeStream(stream, addonId, addonName, index))
+        .map((stream, index) => normalizeStream(stream, addonId, addonName, index, {
+          externalOnly: manifest?.isCustom === true
+        }))
         .filter(Boolean)
         .slice(0, 100);
       return {
@@ -316,8 +356,12 @@ async function collectStreams(type, id, addonIds, browserId) {
         addonName,
         streams,
         returned: rawStreams.length,
-        actionable: streams.filter((stream) => stream.browserReady || stream.externalUrl).length,
-        unsupported: streams.filter((stream) => !stream.browserReady && !stream.externalUrl).length +
+        actionable: streams.filter((stream) =>
+          stream.browserReady || stream.externalUrl || stream.externalPlayerUrl || stream.externalAppUrl
+        ).length,
+        unsupported: streams.filter((stream) =>
+          !stream.browserReady && !stream.externalUrl && !stream.externalPlayerUrl && !stream.externalAppUrl
+        ).length +
           Math.max(0, rawStreams.length - streams.length)
       };
     } catch (error) {
@@ -350,7 +394,7 @@ router.get('/play/:type/:id', async (req, res) => {
     const selected = streams[streamIndex];
 
     if (!selected) {
-      return res.status(404).json({ error: 'No browser-compatible stream was found' });
+      return res.status(404).json({ error: 'No usable source was found' });
     }
 
     res.json(selected);
@@ -369,7 +413,10 @@ router.get('/subtitles/:type/:id', async (req, res) => {
 
     const browserId = clientId(req);
     const providerIds = addonManager.getAddonIds(browserId)
-      .filter((addonId) => addonManager.getManifest(addonId, browserId)?.resources?.includes('subtitles'))
+      .filter((addonId) => {
+        const manifest = addonManager.getManifest(addonId, browserId);
+        return manifest?.isCustom !== true && manifest?.resources?.includes('subtitles');
+      })
       .slice(0, 6);
 
     const results = await Promise.all(providerIds.map(async (addonId) => {

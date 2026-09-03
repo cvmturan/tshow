@@ -34,6 +34,7 @@
         activeStreamIndex: null,
         hlsPlayer: null,
         activeExternalURL: null,
+        activeExternalAppURL: null,
         activeAttemptIndex: null,
         activeHlsURL: null,
         transcodeTried: false,
@@ -129,6 +130,8 @@
             'external-player-actions',
             'open-in-vlc',
             'open-in-outplayer',
+            'open-in-source-app',
+            'copy-source-link',
             'subtitle-select',
             'open-local-subtitle',
             'subtitle-file-input',
@@ -217,6 +220,8 @@
         elements.dataSaverButton.addEventListener('click', toggleDataSaver);
         elements.openInVlc.addEventListener('click', openActiveStreamInVlc);
         elements.openInOutplayer.addEventListener('click', openActiveStreamInOutplayer);
+        elements.openInSourceApp.addEventListener('click', openActiveStreamInSourceApp);
+        elements.copySourceLink.addEventListener('click', copyActiveSourceLink);
         updateDataSaverButton();
         elements.subtitleSelect.addEventListener('change', () => {
             applySubtitleChoice(elements.subtitleSelect.value);
@@ -824,6 +829,7 @@
         state.playerMedia = null;
         state.streams = [];
         state.activeExternalURL = null;
+        state.activeExternalAppURL = null;
         state.activeAttemptIndex = null;
         elements.playerDialog.classList.add('is-trailer');
         elements.playerTitle.textContent = `${mediaTitle(media)} · Official trailer`;
@@ -850,6 +856,7 @@
         elements.externalSource.hidden = true;
         elements.tryDirectSource.hidden = true;
         state.activeExternalURL = null;
+        state.activeExternalAppURL = null;
         state.activeAttemptIndex = null;
         state.activeStreamIndex = null;
         state.visibleStreamIndexes = [];
@@ -927,7 +934,7 @@
         if (stream.playbackMode === 'proxy' && stream.transcodeLowUrl) return 'try';
         if (stream.browserReady) return 'playable';
         if (stream.attemptUrl) return 'try';
-        if (stream.externalUrl) return 'external';
+        if (stream.externalUrl || stream.externalPlayerUrl || stream.externalAppUrl) return 'external';
         return 'app-only';
     }
 
@@ -998,7 +1005,7 @@
         const groups = [
             ['playable', 'Plays in this browser'],
             ['try', 'Proxied browser try'],
-            ['external', 'Provider links'],
+            ['external', 'External apps and provider links'],
             ['app-only', 'App-only or download sources'],
             ['demo', 'Player test — not the selected title']
         ];
@@ -1046,14 +1053,14 @@
 
         elements.sourceSummary.textContent =
             `${counts.all} entries: ${counts.playable} play here, ${counts.try} proxied browser tries, ` +
-            `${counts.external} provider links, ${counts['app-only']} app-only, ${counts.demo} player test.`;
+            `${counts.external} external sources, ${counts['app-only']} app-only, ${counts.demo} player test.`;
         elements.sourceCompatibilityHelp.textContent = sourceFilterHelp(state.sourceFilter);
     }
 
     function sourceFilterHelp(filter) {
         if (filter === 'playable') return 'Direct MP4, WebM, or HLS sources confirmed for browser playback.';
         if (filter === 'try') return 'These smaller sources are forwarded unchanged. They play only when their original format and codec are supported by the device.';
-        if (filter === 'external') return 'Provider pages open separately and are not played inside Cvm Turan.';
+        if (filter === 'external') return 'User-added sources open directly in external players, source apps, or provider pages. Their video never passes through Cvm Turan.';
         if (filter === 'app-only') return 'These are downloads, redirects, torrents, or unknown formats intended for another app.';
         if (filter === 'demo') return 'The short CC0 flower video only tests the player. It is not the movie or episode you selected.';
         return 'Use the filters to separate playable, external, app-only, and player-test entries.';
@@ -1073,8 +1080,10 @@
             badges.push(stream.format ? stream.format.toUpperCase() : 'plays here');
         }
         if (stream.attemptUrl) badges.push(`${stream.format ? stream.format.toUpperCase() : 'stream'} · manual try`);
+        if (stream.externalPlayerUrl && !stream.browserReady) badges.push('external player');
+        if (stream.externalAppUrl && !stream.browserReady) badges.push('source app');
         if (stream.externalUrl && !stream.browserReady) badges.push('provider link');
-        if (!stream.browserReady && !stream.externalUrl && !stream.attemptUrl) {
+        if (!stream.browserReady && !stream.externalUrl && !stream.externalPlayerUrl && !stream.externalAppUrl && !stream.attemptUrl) {
             badges.push(stream.format ? `${stream.format.toUpperCase()} · app-only` : 'app-only · format unknown');
         }
         if (mirrorTotal > 1) badges.push(`mirror ${mirrorNumber}`);
@@ -1090,10 +1099,10 @@
         elements.openExternalSource.hidden = true;
         elements.tryDirectSource.hidden = true;
         elements.speedSelect.disabled = true;
-        elements.externalSourceTitle.textContent = `No browser-ready source for ${mediaTitle(media)}`;
+        elements.externalSourceTitle.textContent = `Choose an external source for ${mediaTitle(media)}`;
         elements.externalSourceNote.textContent = counts['app-only']
-            ? `The add-on returned ${counts['app-only']} app-only or download sources, but no declared MP4, WebM, or HLS stream. You can inspect them below, choose a provider link, or use the separate player test.`
-            : 'No installed add-on supplied a declared MP4, WebM, or HLS stream for this title.';
+            ? `The add-on returned ${counts['app-only']} unavailable entries. Select another entry to open it in an external player, source app, or provider page.`
+            : 'Select a source below to open it directly on this device. User-added video is not relayed through Cvm Turan.';
         elements.playerSourceTitle.textContent = 'Compatibility check complete';
         elements.playerSourceNote.textContent =
             'Cvm Turan will not send unknown downloads or webpage redirects blindly into the video player.';
@@ -1124,6 +1133,7 @@
         elements.tryDirectSource.hidden = true;
         elements.speedSelect.disabled = true;
         state.activeExternalURL = null;
+        state.activeExternalAppURL = null;
         state.activeAttemptIndex = null;
         updateExternalPlayerActions(stream);
         elements.playerSourceTitle.textContent = stream.title || stream.name || 'Web stream';
@@ -1132,22 +1142,33 @@
 
         if (!stream.browserReady) {
             const canOpenExternally = isSafeWebURL(stream.externalUrl);
+            const canOpenPlayer = isSafeWebURL(stream.externalPlayerUrl);
+            const canOpenApp = isSafeExternalAppURL(stream.externalAppUrl);
             const canTryHls = isSafeWebURL(stream.attemptUrl);
             state.activeExternalURL = canOpenExternally ? stream.externalUrl : null;
+            state.activeExternalAppURL = canOpenApp ? stream.externalAppUrl : null;
             state.activeAttemptIndex = canTryHls ? index : null;
             elements.externalSourceTitle.textContent = canOpenExternally
                 ? 'Open this source with its provider'
-                : canTryHls
-                    ? 'This provider marked the HLS source as app-only'
-                    : stream.notWebReady
-                        ? 'App-only download or redirect'
-                        : 'This source cannot play in a browser';
+                : canOpenPlayer
+                    ? 'Open this source in an external player'
+                    : canOpenApp
+                        ? 'Open this source in a compatible app'
+                        : canTryHls
+                            ? 'This provider marked the HLS source as app-only'
+                            : stream.notWebReady
+                                ? 'App-only download or redirect'
+                                : 'This source cannot play in a browser';
             elements.externalSourceNote.textContent = canOpenExternally
                 ? 'The add-on supplied a provider page instead of a direct browser video.'
-                : canTryHls
-                    ? 'You can try the direct HLS link once. It may still fail if the provider blocks browsers or requires an app.'
-                    : stream.unsupportedReason ||
-                        'The add-on must provide a direct MP4, WebM, HLS, or an external provider page.';
+                : canOpenPlayer
+                    ? 'This user-added source goes directly from its provider to your device. Cvm Turan does not proxy or transcode the video.'
+                    : canOpenApp
+                        ? 'Your device will hand this source to a compatible app. Cvm Turan does not download or operate the source.'
+                        : canTryHls
+                            ? 'You can try the direct HLS link once. It may still fail if the provider blocks browsers or requires an app.'
+                            : stream.unsupportedReason ||
+                                'The add-on must provide a direct MP4, WebM, HLS, or an external provider page.';
             elements.openExternalSource.hidden = !canOpenExternally;
             elements.tryDirectSource.hidden = !canTryHls;
             elements.externalSource.hidden = false;
@@ -1192,11 +1213,26 @@
         return isSafeWebURL(stream?.externalPlayerUrl) ? stream.externalPlayerUrl : null;
     }
 
+    function activeSourceLink() {
+        const stream = state.streams[state.activeStreamIndex];
+        if (isSafeWebURL(stream?.externalPlayerUrl)) return stream.externalPlayerUrl;
+        if (isSafeExternalAppURL(stream?.externalAppUrl)) return stream.externalAppUrl;
+        if (isSafeWebURL(stream?.externalUrl)) return stream.externalUrl;
+        return null;
+    }
+
     function updateExternalPlayerActions(stream) {
-        const available = isSafeWebURL(stream?.externalPlayerUrl);
-        elements.externalPlayerActions.hidden = !available;
-        elements.openInVlc.disabled = !available;
-        elements.openInOutplayer.disabled = !available;
+        const playerAvailable = isSafeWebURL(stream?.externalPlayerUrl);
+        const appAvailable = isSafeExternalAppURL(stream?.externalAppUrl);
+        const copyAvailable = Boolean(playerAvailable || appAvailable || isSafeWebURL(stream?.externalUrl));
+        elements.externalPlayerActions.hidden = !copyAvailable;
+        elements.openInVlc.hidden = !playerAvailable;
+        elements.openInOutplayer.hidden = !playerAvailable;
+        elements.openInVlc.disabled = !playerAvailable;
+        elements.openInOutplayer.disabled = !playerAvailable;
+        elements.openInSourceApp.hidden = !appAvailable;
+        elements.openInSourceApp.disabled = !appAvailable;
+        elements.copySourceLink.disabled = !copyAvailable;
     }
 
     function openActiveStreamInVlc() {
@@ -1215,6 +1251,27 @@
         setTimeout(() => {
             showToast('If Outplayer did not open, install Outplayer from the App Store.', 'info');
         }, 800);
+    }
+
+    function openActiveStreamInSourceApp() {
+        if (!isSafeExternalAppURL(state.activeExternalAppURL)) {
+            return showToast('This entry has no safe external-app link.', 'warning');
+        }
+        window.location.href = state.activeExternalAppURL;
+        setTimeout(() => {
+            showToast('If no app opened, copy the source link and use an app you trust.', 'info');
+        }, 800);
+    }
+
+    async function copyActiveSourceLink() {
+        const link = activeSourceLink();
+        if (!link) return showToast('This entry has no safe source link.', 'warning');
+        try {
+            await navigator.clipboard.writeText(link);
+            showToast('Source link copied.', 'info');
+        } catch {
+            showToast('The browser could not copy this link.', 'warning');
+        }
     }
 
     function subtitleTrackSrc(subtitle) {
@@ -1516,6 +1573,7 @@
         elements.externalSource.hidden = true;
         elements.externalPlayerActions.hidden = true;
         state.activeExternalURL = null;
+        state.activeExternalAppURL = null;
         state.activeAttemptIndex = null;
         state.transcodeTried = false;
         state.activeHlsURL = null;
@@ -2452,6 +2510,18 @@
         try {
             const url = new URL(String(value || ''));
             return ['https:', 'http:'].includes(url.protocol);
+        } catch {
+            return false;
+        }
+    }
+
+    function isSafeExternalAppURL(value) {
+        try {
+            const url = new URL(String(value || ''));
+            if (url.protocol !== 'magnet:') return false;
+            return /^urn:btih:(?:[a-f0-9]{40}|[a-z2-7]{32})$/i.test(
+                String(url.searchParams.get('xt') || '')
+            );
         } catch {
             return false;
         }

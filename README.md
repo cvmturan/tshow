@@ -65,7 +65,9 @@ Installed manifest URLs are saved in that browser's local storage and restored a
 
 Search providers are separate from playback providers. Official Cinemeta movie/series search and TVmaze series search are permanent protected providers. Search also queries any browser-installed add-on that explicitly declares a search catalog. A slow or unavailable provider is skipped without hiding results returned by the others.
 
-Catalog add-ons create home-screen rows. Stream-only add-ons appear when **Play** checks a title, but do not add movie rows by themselves. Installation does not guarantee browser playback: a provider must return a declared direct MP4, WebM, or HLS URL (or an external provider page). App-only downloads, MKV files, and HTML redirects remain visible for diagnosis but are not sent blindly to the browser player.
+Catalog add-ons create home-screen rows. Stream-only add-ons appear when **Play** checks a title, but do not add movie rows by themselves. Sources from a user-installed add-on are external-only: safe HTTP/HTTPS links can be opened in VLC or Outplayer or copied, valid BitTorrent info hashes can be handed to a compatible app, and provider pages open separately. Cvm Turan does not proxy, download, cache, transcode, or subtitle-relay content from a user-installed add-on. It still fetches that add-on's manifest and catalog, metadata, and stream-description JSON so the interface can list its results.
+
+Built-in lawful player sources, local files, and official trailers can still play in the browser. Unsafe protocols, local-network destinations, and malformed source-app links remain blocked. The Terms, Privacy Policy, Copyright Policy, legal notice, and provider credits are published at `/legal.html`.
 
 A minimal compatible stream manifest looks like this:
 
@@ -86,7 +88,7 @@ For a movie request such as:
 GET /stream/movie/tt0111161.json
 ```
 
-the add-on should return direct browser-playable HTTP or HTTPS video URLs:
+the add-on can return an authorized HTTP or HTTPS video URL for the visitor to open directly on their device:
 
 ```json
 {

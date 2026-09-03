@@ -267,6 +267,57 @@ test('browser stream classifier rejects archives and keeps direct, HLS, and exte
   assert.equal(mimeTypeHls.format, 'hls');
 });
 
+test('user-added sources are external-only and never receive proxy or transcode URLs', () => {
+  const classify = streamRouter.classifyStream;
+  const options = { externalOnly: true };
+  const direct = classify(
+    { name: 'Private direct', url: 'https://media.example.test/video.mp4', type: 'video/mp4' },
+    'org.private',
+    'Private',
+    0,
+    options
+  );
+  const withHeaders = classify(
+    {
+      name: 'Private headers',
+      url: 'https://media.example.test/header-video.mp4',
+      behaviorHints: { proxyHeaders: { request: { referer: 'https://provider.example.test/' } } }
+    },
+    'org.private',
+    'Private',
+    1,
+    options
+  );
+  const torrent = classify(
+    { name: 'Private torrent', infoHash: '0123456789abcdef0123456789abcdef01234567' },
+    'org.private',
+    'Private',
+    2,
+    options
+  );
+  const unsafe = classify(
+    { name: 'Unsafe', url: 'javascript:alert(1)' },
+    'org.private',
+    'Private',
+    3,
+    options
+  );
+
+  for (const source of [direct, withHeaders, torrent]) {
+    assert.equal(source.browserReady, false);
+    assert.equal(source.url, null);
+    assert.equal(source.transcodeUrl, null);
+    assert.equal(source.transcodeLowUrl, null);
+  }
+  assert.equal(direct.playbackMode, 'external-player');
+  assert.equal(direct.externalPlayerUrl, 'https://media.example.test/video.mp4');
+  assert.equal(withHeaders.playbackMode, 'external-player');
+  assert.equal(withHeaders.requiresHeaders, true);
+  assert.equal(torrent.playbackMode, 'external-app');
+  assert.match(torrent.externalAppUrl, /^magnet:\?xt=urn%3Abtih%3A/i);
+  assert.equal(unsafe, null);
+});
+
 test('a lawful local Stremio fixture serves catalogs, episode metadata, and ordered browser sources', async () => {
   const requestedPaths = [];
   const manifest = {
@@ -345,6 +396,10 @@ test('a lawful local Stremio fixture serves catalogs, episode metadata, and orde
           {
             name: 'Fixture page',
             externalUrl: 'https://example.test/fixture'
+          },
+          {
+            name: 'Fixture source app',
+            infoHash: '0123456789abcdef0123456789abcdef01234567'
           }
         ]
       }));
@@ -399,17 +454,29 @@ test('a lawful local Stremio fixture serves catalogs, episode metadata, and orde
       `/api/streams/movie/${encodeURIComponent('test:movie')}`
     );
     assert.equal(streams.response.status, 200);
-    assert.equal(streams.data.streams[0].sourceAddon, manifest.id);
-    assert.equal(streams.data.streams[0].browserReady, true);
-    assert.equal(streams.data.streams[0].playbackMode, 'direct');
+    const directSource = streams.data.streams.find((stream) => stream.name === 'Fixture direct');
+    const hlsSource = streams.data.streams.find((stream) => stream.name === 'Fixture HLS');
+    const sourceApp = streams.data.streams.find((stream) => stream.name === 'Fixture source app');
+    assert.equal(directSource.sourceAddon, manifest.id);
+    assert.equal(directSource.browserReady, false);
+    assert.equal(directSource.playbackMode, 'external-player');
+    assert.equal(directSource.url, null);
+    assert.equal(directSource.externalPlayerUrl, 'https://media.example.test/fixture.mp4');
+    assert.equal(hlsSource.browserReady, false);
+    assert.equal(hlsSource.playbackMode, 'external-player');
+    assert.equal(sourceApp.playbackMode, 'external-app');
+    assert.match(sourceApp.externalAppUrl, /^magnet:/);
+    for (const source of streams.data.streams.filter((stream) => stream.sourceAddon === manifest.id)) {
+      assert.equal(source.url, null);
+      assert.equal(source.transcodeUrl, null);
+      assert.equal(source.transcodeLowUrl, null);
+    }
     const demoIndex = streams.data.streams.findIndex((stream) => stream.isDemo);
-    const externalIndex = streams.data.streams.findIndex((stream) => stream.externalUrl);
     const archiveIndex = streams.data.streams.findIndex((stream) =>
       /archive/i.test(stream.name)
     );
-    assert.ok(demoIndex > 0);
-    assert.ok(externalIndex > demoIndex);
-    assert.ok(archiveIndex > externalIndex);
+    assert.equal(demoIndex, 0);
+    assert.ok(archiveIndex > demoIndex);
     assert.equal(streams.data.streams[archiveIndex].browserReady, false);
 
     const otherBrowserRemoval = await getJSON(`/api/addons/${manifest.id}`, {
@@ -452,6 +519,10 @@ test('HTML app is served with a strict same-origin security policy', async () =>
   assert.match(html, /id="try-direct-source"/);
   assert.match(html, /id="source-summary"/);
   assert.match(html, /data-source-filter="app-only"/);
+  assert.match(html, /id="addon-legal-agreement"/);
+  assert.match(html, /id="open-in-source-app"/);
+  assert.match(html, /id="copy-source-link"/);
+  assert.match(html, /\/legal\.html#terms/);
   assert.match(html, /TVmaze/);
   assert.match(response.headers.get('content-security-policy') || '', /default-src 'self'/);
   assert.match(
@@ -459,4 +530,16 @@ test('HTML app is served with a strict same-origin security policy', async () =>
     /frame-src 'self' https:\/\/www\.youtube-nocookie\.com/
   );
   assert.equal(response.headers.get('access-control-allow-origin'), null);
+});
+
+test('legal center is served with terms, privacy, copyright, and provider notices', async () => {
+  const response = await fetch(`${baseURL}/legal.html`);
+  const html = await response.text();
+  assert.equal(response.status, 200);
+  assert.match(html, /id="terms"/);
+  assert.match(html, /id="privacy"/);
+  assert.match(html, /id="copyright"/);
+  assert.match(html, /id="notice"/);
+  assert.match(html, /does not proxy, download, cache, or transcode their video/i);
+  assert.match(html, /This product uses the TMDB API when configured but is not endorsed or certified by TMDB/);
 });
