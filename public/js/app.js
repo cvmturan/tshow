@@ -4,6 +4,7 @@
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
         continueWatching: 'streamflix:continue:v1',
+        recentlyViewed: 'tshow:recent:v1',
         dataSaver: 'streamflix:data-saver:v1',
         addonURLs: 'streamflix:addons:v1',
         addonClientId: 'streamflix:addon-client:v1'
@@ -15,8 +16,13 @@
         trending: [],
         movies: [],
         series: [],
+        latestMovies: [],
+        topMovies: [],
+        topSeries: [],
+        airingToday: [],
         featured: null,
         watchlist: loadStoredArray(STORAGE_KEYS.watchlist),
+        recentlyViewed: loadStoredArray(STORAGE_KEYS.recentlyViewed),
         continueEntry: loadStoredValue(STORAGE_KEYS.continueWatching),
         addons: [],
         addonCatalogs: [],
@@ -48,7 +54,8 @@
             .filter((value) => typeof value === 'string' && value.length <= 8192)
             .slice(0, 20),
         lastAddonSync: 0,
-        dataSaver: false
+        dataSaver: false,
+        installPrompt: null
     };
 
     const elements = {};
@@ -60,19 +67,35 @@
         bindEvents();
         updateListCount();
         renderContinueWatching();
+        renderRecentlyViewed();
         renderLoadingCards(elements.trendingRail, 8);
         renderLoadingCards(elements.moviesRail, 8);
         renderLoadingCards(elements.seriesRail, 8);
+        renderLoadingCards(elements.latestMoviesRail, 8);
+        renderLoadingCards(elements.topMoviesRail, 8);
+        renderLoadingCards(elements.topSeriesRail, 8);
+        renderLoadingCards(elements.airingTodayRail, 8);
+        updateClock();
+        window.setInterval(updateClock, 30_000);
+        registerPWA();
 
         await Promise.all([
             loadHome(),
             initializeAddons()
         ]);
+
+        const requestedView = new URLSearchParams(window.location.search).get('view');
+        if (['home', 'list', 'addons', 'help'].includes(requestedView)) setView(requestedView);
     }
 
     function cacheElements() {
         const ids = [
             'site-header',
+            'site-sidebar',
+            'sidebar-scrim',
+            'menu-button',
+            'install-app-button',
+            'header-clock',
             'search-form',
             'search-input',
             'search-clear',
@@ -92,6 +115,12 @@
             'trending-rail',
             'movies-rail',
             'series-rail',
+            'latest-movies-rail',
+            'top-movies-rail',
+            'top-series-rail',
+            'airing-today-rail',
+            'recent-section',
+            'recent-rail',
             'addon-catalogs-section',
             'addon-catalogs-container',
             'refresh-addon-catalogs',
@@ -107,6 +136,12 @@
             'install-addon-button',
             'refresh-addons',
             'addon-grid',
+            'export-data-button',
+            'import-data-button',
+            'import-data-input',
+            'contact-form',
+            'contact-submit',
+            'contact-status',
             'details-dialog',
             'details-close',
             'details-content',
@@ -147,11 +182,28 @@
 
     function bindEvents() {
         document.querySelectorAll('.nav-trigger, .nav-link').forEach((button) => {
-            button.addEventListener('click', () => setView(button.dataset.view));
+            if (!button.dataset.view) return;
+            button.addEventListener('click', () => {
+                setView(button.dataset.view);
+                closeSidebar();
+            });
         });
 
-        document.querySelectorAll('[data-search-type]').forEach((button) => {
-            button.addEventListener('click', () => showBrowseView(button.dataset.searchType));
+        document.querySelectorAll('[data-browse-collection]').forEach((button) => {
+            button.addEventListener('click', () => {
+                showBrowseView(button.dataset.browseCollection === 'movies' ? 'movie' : 'tv');
+                closeSidebar();
+            });
+        });
+
+        document.querySelectorAll('[data-browse-rail]').forEach((button) => {
+            button.addEventListener('click', () => showCollectionView(button.dataset.browseRail));
+        });
+
+        elements.menuButton.addEventListener('click', toggleSidebar);
+        elements.sidebarScrim.addEventListener('click', closeSidebar);
+        window.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') closeSidebar();
         });
 
         elements.searchForm.addEventListener('submit', (event) => {
@@ -172,6 +224,7 @@
 
         elements.openLocalButton.addEventListener('click', () => {
             elements.localVideoInput.click();
+            closeSidebar();
         });
         elements.localVideoInput.addEventListener('change', openLocalVideo);
 
@@ -189,6 +242,22 @@
 
         elements.addonForm.addEventListener('submit', installAddon);
         elements.refreshAddons.addEventListener('click', refreshAddons);
+        elements.exportDataButton.addEventListener('click', exportBrowserData);
+        elements.importDataButton.addEventListener('click', () => elements.importDataInput.click());
+        elements.importDataInput.addEventListener('change', importBrowserData);
+        elements.contactForm.addEventListener('submit', submitContactForm);
+
+        window.addEventListener('beforeinstallprompt', (event) => {
+            event.preventDefault();
+            state.installPrompt = event;
+            elements.installAppButton.hidden = false;
+        });
+        elements.installAppButton.addEventListener('click', installPWA);
+        window.addEventListener('appinstalled', () => {
+            state.installPrompt = null;
+            elements.installAppButton.hidden = true;
+            showToast('TShow was installed successfully.');
+        });
         elements.refreshAddonCatalogs.addEventListener('click', () => {
             state.addonCatalogLoadPromise = loadAddonCatalogs({ force: true });
         });
@@ -265,31 +334,39 @@
             let catalogLabel = 'Live public metadata';
 
             if (tmdbHealth.tmdbKey) {
-                const [trendingData, moviesData, seriesData] = await Promise.all([
+                const [trendingData, moviesData, seriesData, latestMoviesData, topMoviesData, topSeriesData, airingData] = await Promise.all([
                     api('/api/tmdb/trending/all/week'),
-                    api('/api/tmdb/discover/movies'),
-                    api('/api/tmdb/discover/tv')
+                    loadPagedCatalog('/api/tmdb/popular/movies'),
+                    loadPagedCatalog('/api/tmdb/popular/tv'),
+                    loadPagedCatalog('/api/tmdb/now-playing/movies'),
+                    loadPagedCatalog('/api/tmdb/top-rated/movies'),
+                    loadPagedCatalog('/api/tmdb/top-rated/tv'),
+                    loadPagedCatalog('/api/tmdb/airing-today/tv')
                 ]);
                 state.movies = normalizeCollection(moviesData.results, 'movie');
                 state.series = normalizeCollection(seriesData.results, 'tv');
                 state.trending = normalizeCollection(trendingData.results);
-                catalogLabel = 'Live TMDB catalog';
+                state.latestMovies = normalizeCollection(latestMoviesData.results, 'movie');
+                state.topMovies = normalizeCollection(topMoviesData.results, 'movie');
+                state.topSeries = normalizeCollection(topSeriesData.results, 'tv');
+                state.airingToday = normalizeCollection(airingData.results, 'tv');
+                catalogLabel = 'Live movie & TV catalog';
             } else {
                 try {
-                    const [moviesData, seriesData] = await Promise.all([
-                        api('/api/addons/catalog/org.cvmturan.discovery/movie/top'),
-                        api('/api/addons/catalog/org.cvmturan.discovery/series/top')
+                    const [moviePages, seriesPages] = await Promise.all([
+                        Promise.all([0, 100, 200].map((skip) => api(`/api/addons/catalog/org.cvmturan.discovery/movie/top?skip=${skip}`))),
+                        Promise.all([0, 100, 200].map((skip) => api(`/api/addons/catalog/org.cvmturan.discovery/series/top?skip=${skip}`)))
                     ]);
                     const discoveryAddon = {
                         id: 'org.cvmturan.discovery',
-                        name: 'Cvm Turan Discovery'
+                        name: 'TShow Discovery'
                     };
                     state.movies = normalizeLiveCatalog(
-                        moviesData,
+                        mergeAddonCatalogPages(moviePages),
                         { addon: discoveryAddon, catalog: { id: 'top', name: 'Popular movies' }, type: 'movie' }
                     );
                     state.series = normalizeLiveCatalog(
-                        seriesData,
+                        mergeAddonCatalogPages(seriesPages),
                         { addon: discoveryAddon, catalog: { id: 'top', name: 'Popular series' }, type: 'series' }
                     );
                     state.trending = weaveCollections(state.movies, state.series);
@@ -307,6 +384,10 @@
                     state.trending = normalizeCollection(trendingData.results);
                     catalogLabel = 'Offline fallback catalog';
                 }
+                state.latestMovies = sortByLatest(state.movies);
+                state.topMovies = sortByRating(state.movies);
+                state.topSeries = sortByRating(state.series);
+                state.airingToday = sortByLatest(state.series);
             }
 
             if (!state.trending.length) {
@@ -322,14 +403,50 @@
             renderRail(elements.trendingRail, state.trending);
             renderRail(elements.moviesRail, state.movies);
             renderRail(elements.seriesRail, state.series);
+            renderRail(elements.latestMoviesRail, state.latestMovies);
+            renderRail(elements.topMoviesRail, state.topMovies);
+            renderRail(elements.topSeriesRail, state.topSeries);
+            renderRail(elements.airingTodayRail, state.airingToday);
             elements.catalogMode.textContent = catalogLabel;
         } catch (error) {
-            renderRail(elements.trendingRail, []);
-            renderRail(elements.moviesRail, []);
-            renderRail(elements.seriesRail, []);
+            [elements.trendingRail, elements.moviesRail, elements.seriesRail, elements.latestMoviesRail,
+                elements.topMoviesRail, elements.topSeriesRail, elements.airingTodayRail]
+                .forEach((rail) => renderRail(rail, []));
             elements.catalogMode.textContent = 'Catalog unavailable';
             showToast(error.message || 'Could not load the catalog.', 'error');
         }
+    }
+
+    async function loadPagedCatalog(path, pageCount = 2) {
+        const pages = await Promise.all(
+            Array.from({ length: pageCount }, (_, index) => api(`${path}?page=${index + 1}`))
+        );
+        return {
+            results: pages.flatMap((page) => Array.isArray(page?.results) ? page.results : [])
+        };
+    }
+
+    function mergeAddonCatalogPages(pages) {
+        return {
+            metas: pages.flatMap((page) => Array.isArray(page?.metas)
+                ? page.metas
+                : Array.isArray(page?.results) ? page.results : [])
+        };
+    }
+
+    function sortByLatest(items) {
+        return [...items].sort((left, right) => {
+            const leftDate = Date.parse(left.release_date || left.first_air_date || left.releaseInfo || '') || 0;
+            const rightDate = Date.parse(right.release_date || right.first_air_date || right.releaseInfo || '') || 0;
+            return rightDate - leftDate || Number(right.popularity || 0) - Number(left.popularity || 0);
+        });
+    }
+
+    function sortByRating(items) {
+        return [...items].sort((left, right) =>
+            Number(right.vote_average || 0) - Number(left.vote_average || 0) ||
+            Number(right.popularity || 0) - Number(left.popularity || 0)
+        );
     }
 
     function normalizeLiveCatalog(data, descriptor) {
@@ -365,7 +482,7 @@
 
         elements.heroTitle.textContent = title;
         elements.heroOverview.textContent = media.overview || 'Open the title to see more information.';
-        const provider = (media._sourceAddonId === 'org.cvmturan.discovery' ? 'Cvm Turan' : null) ||
+        const provider = (media._sourceAddonId === 'org.cvmturan.discovery' ? 'TShow' : null) ||
             media._catalogName ||
             media._sourceAddonName ||
             'Catalog title';
@@ -417,7 +534,7 @@
         const fallback = makeElement('span', 'poster-fallback', title.slice(0, 1).toUpperCase() || 'S');
         frame.append(fallback);
 
-        const sourceLabel = (media._sourceAddonId === 'org.cvmturan.discovery' ? 'Cvm Turan' : null) ||
+        const sourceLabel = (media._sourceAddonId === 'org.cvmturan.discovery' ? 'TShow' : null) ||
             media._catalogName ||
             media._sourceAddonName;
         if (sourceLabel) {
@@ -490,6 +607,7 @@
             }
 
             renderDetails(state.activeMedia, state.activeDetails);
+            rememberRecentlyViewed(state.activeMedia);
             openDialog(elements.detailsDialog);
         } catch (error) {
             showToast(error.message || 'Could not load title details.', 'error');
@@ -702,7 +820,11 @@
             listButton.textContent = added ? '✓ In my list' : '＋ My list';
         });
 
-        actions.append(playButton, trailerButton, listButton);
+        const shareButton = makeElement('button', 'button button-quiet', 'Share');
+        shareButton.type = 'button';
+        shareButton.addEventListener('click', () => shareMedia(media));
+
+        actions.append(playButton, trailerButton, listButton, shareButton);
         main.append(actions);
         main.append(makeElement(
             'p',
@@ -842,7 +964,7 @@
         elements.streamSelect.replaceChildren();
         elements.playerSourceTitle.textContent = 'Official trailer';
         elements.playerSourceNote.textContent =
-            'Trailer metadata came from the title API and is playing inside Cvm Turan.';
+            'Trailer metadata came from the title API and is playing inside TShow.';
         openDialog(elements.playerDialog);
     }
 
@@ -1060,7 +1182,7 @@
     function sourceFilterHelp(filter) {
         if (filter === 'playable') return 'Direct MP4, WebM, or HLS sources confirmed for browser playback.';
         if (filter === 'try') return 'These smaller sources are forwarded unchanged. They play only when their original format and codec are supported by the device.';
-        if (filter === 'external') return 'User-added sources open directly in external players, source apps, or provider pages. Their video never passes through Cvm Turan.';
+        if (filter === 'external') return 'User-added sources open directly in external players, source apps, or provider pages. Their video never passes through TShow.';
         if (filter === 'app-only') return 'These are downloads, redirects, torrents, or unknown formats intended for another app.';
         if (filter === 'demo') return 'The short CC0 flower video only tests the player. It is not the movie or episode you selected.';
         return 'Use the filters to separate playable, external, app-only, and player-test entries.';
@@ -1102,10 +1224,10 @@
         elements.externalSourceTitle.textContent = `Choose an external source for ${mediaTitle(media)}`;
         elements.externalSourceNote.textContent = counts['app-only']
             ? `The add-on returned ${counts['app-only']} unavailable entries. Select another entry to open it in an external player, source app, or provider page.`
-            : 'Select a source below to open it directly on this device. User-added video is not relayed through Cvm Turan.';
+            : 'Select a source below to open it directly on this device. User-added video is not relayed through TShow.';
         elements.playerSourceTitle.textContent = 'Compatibility check complete';
         elements.playerSourceNote.textContent =
-            'Cvm Turan will not send unknown downloads or webpage redirects blindly into the video player.';
+            'TShow will not send unknown downloads or webpage redirects blindly into the video player.';
     }
 
     function applyStream(index, { forceAttempt = false } = {}) {
@@ -1162,9 +1284,9 @@
             elements.externalSourceNote.textContent = canOpenExternally
                 ? 'The add-on supplied a provider page instead of a direct browser video.'
                 : canOpenPlayer
-                    ? 'This user-added source goes directly from its provider to your device. Cvm Turan does not proxy or transcode the video.'
+                    ? 'This user-added source goes directly from its provider to your device. TShow does not proxy or transcode the video.'
                     : canOpenApp
-                        ? 'Your device will hand this source to a compatible app. Cvm Turan does not download or operate the source.'
+                        ? 'Your device will hand this source to a compatible app. TShow does not download or operate the source.'
                         : canTryHls
                             ? 'You can try the direct HLS link once. It may still fail if the provider blocks browsers or requires an app.'
                             : stream.unsupportedReason ||
@@ -1689,6 +1811,39 @@
         elements.listEmpty.hidden = items.length > 0;
     }
 
+    function rememberRecentlyViewed(media) {
+        const serialized = serializeMedia(media);
+        state.recentlyViewed = [
+            serialized,
+            ...state.recentlyViewed.filter((item) => mediaKey(item) !== mediaKey(serialized))
+        ].slice(0, 20);
+        localStorage.setItem(STORAGE_KEYS.recentlyViewed, JSON.stringify(state.recentlyViewed));
+        renderRecentlyViewed();
+    }
+
+    function renderRecentlyViewed() {
+        const items = state.recentlyViewed.map((item) => normalizeMedia(item)).filter(Boolean);
+        elements.recentSection.hidden = items.length === 0;
+        if (items.length) renderRail(elements.recentRail, items);
+    }
+
+    async function shareMedia(media) {
+        const shareData = {
+            title: `${mediaTitle(media)} · TShow`,
+            text: `Discover ${mediaTitle(media)} on TShow`,
+            url: window.location.href.split('#')[0]
+        };
+        try {
+            if (navigator.share) await navigator.share(shareData);
+            else {
+                await navigator.clipboard.writeText(`${shareData.text} ${shareData.url}`);
+                showToast('Share link copied.');
+            }
+        } catch (error) {
+            if (error?.name !== 'AbortError') showToast('Could not share this title.', 'error');
+        }
+    }
+
     async function runSearch(rawQuery) {
         const query = String(rawQuery || '').trim();
         if (query.length < 2) {
@@ -1758,11 +1913,34 @@
         elements.searchEmpty.hidden = items.length > 0;
     }
 
+    function showCollectionView(collectionName) {
+        const collections = {
+            trending: ['Trending now', state.trending],
+            movies: ['Popular movies', state.movies],
+            latestMovies: ['Latest movies', state.latestMovies],
+            topMovies: ['Top-rated movies', state.topMovies],
+            series: ['Popular series', state.series],
+            topSeries: ['Top-rated series', state.topSeries],
+            airingToday: ['Airing today', state.airingToday]
+        };
+        const [title, items] = collections[collectionName] || ['Browse', []];
+        const results = dedupeSearchResults(items);
+        setView('search');
+        elements.searchTitle.textContent = title;
+        elements.searchSummary.textContent = pluralize(results.length, 'title');
+        elements.searchGrid.replaceChildren(...results.map((item) => createMediaCard(item)));
+        elements.searchEmpty.hidden = results.length > 0;
+    }
+
     function allLoadedCatalogItems() {
         return [
             ...state.movies,
             ...state.series,
             ...state.trending,
+            ...state.latestMovies,
+            ...state.topMovies,
+            ...state.topSeries,
+            ...state.airingToday,
             ...state.addonCatalogs.flatMap((catalog) => catalog.items || []),
             ...state.watchlist.map((item) => normalizeMedia(item))
         ].filter(Boolean);
@@ -2211,7 +2389,7 @@
     }
 
     async function removeAddon(addon) {
-        const confirmed = window.confirm(`Remove “${addon.name}” from Cvm Turan?`);
+        const confirmed = window.confirm(`Remove “${addon.name}” from TShow?`);
         if (!confirmed) return;
 
         try {
@@ -2524,6 +2702,143 @@
             );
         } catch {
             return false;
+        }
+    }
+
+    function toggleSidebar() {
+        const open = !document.body.classList.contains('sidebar-open');
+        document.body.classList.toggle('sidebar-open', open);
+        elements.menuButton.setAttribute('aria-expanded', String(open));
+        elements.sidebarScrim.hidden = !open;
+    }
+
+    function closeSidebar() {
+        document.body.classList.remove('sidebar-open');
+        elements.menuButton.setAttribute('aria-expanded', 'false');
+        elements.sidebarScrim.hidden = true;
+    }
+
+    function updateClock() {
+        const now = new Date();
+        elements.headerClock.dateTime = now.toISOString();
+        elements.headerClock.textContent = new Intl.DateTimeFormat(undefined, {
+            hour: 'numeric',
+            minute: '2-digit'
+        }).format(now);
+        elements.headerClock.title = new Intl.DateTimeFormat(undefined, {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit'
+        }).format(now);
+    }
+
+    function registerPWA() {
+        const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        elements.installAppButton.hidden = standalone;
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(() => {
+                // The website remains fully usable if offline installation is unavailable.
+            });
+        }
+    }
+
+    async function installPWA() {
+        closeSidebar();
+        if (state.installPrompt) {
+            state.installPrompt.prompt();
+            await state.installPrompt.userChoice;
+            state.installPrompt = null;
+            return;
+        }
+        const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+        showToast(
+            isIOS
+                ? 'In Safari, tap Share and then “Add to Home Screen”.'
+                : 'Open your browser menu and choose “Install app” or “Add to Home screen”.',
+            'warning'
+        );
+    }
+
+    function exportBrowserData() {
+        const payload = {
+            version: 1,
+            app: 'TShow',
+            exportedAt: new Date().toISOString(),
+            watchlist: state.watchlist.slice(0, 250),
+            recentlyViewed: state.recentlyViewed.slice(0, 20),
+            addonURLs: state.addonURLs.slice(0, 20)
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `tshow-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+        showToast('Browser backup exported.');
+    }
+
+    async function importBrowserData(event) {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        if (file.size > 1_000_000) {
+            showToast('That backup is too large.', 'error');
+            return;
+        }
+        try {
+            const payload = JSON.parse(await file.text());
+            if (payload?.app !== 'TShow' || payload?.version !== 1) {
+                throw new Error('This is not a supported TShow backup.');
+            }
+            state.watchlist = Array.isArray(payload.watchlist) ? payload.watchlist.slice(0, 250) : [];
+            state.recentlyViewed = Array.isArray(payload.recentlyViewed) ? payload.recentlyViewed.slice(0, 20) : [];
+            state.addonURLs = Array.isArray(payload.addonURLs)
+                ? payload.addonURLs.filter((value) => typeof value === 'string' && value.length <= 8192).slice(0, 20)
+                : [];
+            localStorage.setItem(STORAGE_KEYS.watchlist, JSON.stringify(state.watchlist));
+            localStorage.setItem(STORAGE_KEYS.recentlyViewed, JSON.stringify(state.recentlyViewed));
+            saveAddonURLs();
+            updateListCount();
+            renderRecentlyViewed();
+            await syncStoredAddons();
+            await loadAddons({ quiet: true });
+            showToast('Backup restored in this browser.');
+        } catch (error) {
+            showToast(error.message || 'The backup could not be imported.', 'error');
+        }
+    }
+
+    async function submitContactForm(event) {
+        event.preventDefault();
+        const formData = new FormData(elements.contactForm);
+        const payload = {
+            type: String(formData.get('type') || ''),
+            name: String(formData.get('name') || ''),
+            email: String(formData.get('email') || ''),
+            message: String(formData.get('message') || ''),
+            website: String(formData.get('website') || ''),
+            consent: formData.get('consent') === 'on'
+        };
+        setButtonBusy(elements.contactSubmit, true, 'Sending…');
+        elements.contactStatus.textContent = '';
+        try {
+            const result = await api('/api/contact', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            elements.contactForm.reset();
+            elements.contactStatus.textContent = result.message || 'Your message was sent.';
+            showToast('Message sent to TShow support.');
+        } catch (error) {
+            elements.contactStatus.textContent = error.message || 'The message could not be sent.';
+            showToast(elements.contactStatus.textContent, 'error');
+        } finally {
+            setButtonBusy(elements.contactSubmit, false, 'Send message');
         }
     }
 

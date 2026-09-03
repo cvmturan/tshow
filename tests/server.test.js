@@ -18,6 +18,7 @@ const streamRouter = require('../src/api/streams');
 const transcodeRouter = require('../src/api/transcode');
 const addonManager = require('../src/core/addonManager');
 const tvmaze = require('../src/core/tvmaze');
+const contactRouter = require('../src/api/contact');
 
 let server;
 let baseURL;
@@ -75,7 +76,7 @@ test('health endpoint reports a ready local server', async () => {
   const { response, data } = await getJSON('/api/health');
   assert.equal(response.status, 200);
   assert.equal(data.status, 'ok');
-  assert.equal(data.version, '1.1.0');
+  assert.equal(data.version, '1.2.0');
   assert.equal(data.hostScope, 'local');
   assert.equal(data.tmdbConfigured, false);
 });
@@ -84,6 +85,26 @@ test('debrid account routes are disabled without a server access key', async () 
   const { response, data } = await getJSON('/api/debrid/services');
   assert.equal(response.status, 403);
   assert.match(data.error, /disabled/i);
+});
+
+test('contact form validation rejects unsafe or incomplete submissions', () => {
+  assert.match(contactRouter.validateContactInput({}).error, /type/i);
+  assert.match(contactRouter.validateContactInput({
+    type: 'support', name: 'Test User', email: 'not-an-email', message: 'A useful test message', consent: true
+  }).error, /email/i);
+  assert.equal(contactRouter.validateContactInput({
+    type: 'security', name: 'Test User', email: 'test@example.com', message: 'A useful security report', consent: true
+  }).value.type, 'security');
+});
+
+test('contact form honeypot silently accepts bot submissions without delivery', async () => {
+  const { response, data } = await getJSON('/api/contact', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ website: 'https://spam.example', type: 'support' })
+  });
+  assert.equal(response.status, 202);
+  assert.match(data.message, /received/i);
 });
 
 test('media proxy rejects links that were not issued by the server', async () => {
@@ -514,7 +535,7 @@ test('HTML app is served with a strict same-origin security policy', async () =>
   const html = await response.text();
   assert.equal(response.status, 200);
   assert.match(html, /Manual add-ons/);
-  assert.match(html, /Cvm Turan/);
+  assert.match(html, /TShow/);
   assert.match(html, /id="trailer-frame"/);
   assert.match(html, /id="try-direct-source"/);
   assert.match(html, /id="source-summary"/);

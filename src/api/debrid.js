@@ -134,7 +134,7 @@ router.post('/configure', async (req, res) => {
   try {
     if (process.env.ALLOW_RUNTIME_DEBRID_CONFIG !== 'true') {
       return res.status(403).json({
-        error: 'Runtime token configuration is disabled. Put your own token in the local .env file and restart StreamFlix.'
+        error: 'Runtime token configuration is disabled. Put your own token in the local .env file and restart TShow.'
       });
     }
     const { service, token } = req.body;

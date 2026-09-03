@@ -44,7 +44,7 @@ class AddonManager {
       this.builtInIds.clear();
       this.loadBuiltInAddons();
       this.initialized = true;
-      console.log(`Loaded ${this.addons.size} Cvm Turan add-ons`);
+      console.log(`Loaded ${this.addons.size} TShow add-ons`);
     })();
 
     try {
@@ -58,7 +58,7 @@ class AddonManager {
     const builtInAddons = [
       {
         id: 'org.streamflix.catalog',
-        name: 'Cvm Turan Offline Catalog',
+        name: 'TShow Offline Catalog',
         version: '1.1.0',
         description: 'A small offline fallback catalog used only when live metadata is unavailable.',
         resources: ['catalog', 'meta'],
@@ -71,9 +71,9 @@ class AddonManager {
       },
       {
         id: 'org.cvmturan.discovery',
-        name: 'Cvm Turan Discovery',
+        name: 'TShow Discovery',
         version: '1.0.0',
-        description: 'Fresh popular movie and series metadata for the Cvm Turan home screen.',
+        description: 'Fresh popular movie and series metadata for the TShow home screen.',
         resources: ['catalog'],
         types: ['movie', 'series'],
         idPrefixes: ['tt'],
@@ -86,7 +86,7 @@ class AddonManager {
       },
       {
         id: 'org.streamflix.open-samples',
-        name: 'Cvm Turan Open Samples',
+        name: 'TShow Open Samples',
         version: '1.1.0',
         description: 'A short public CC0 sample used to test the player. It is never presented as the selected title.',
         resources: ['stream'],
@@ -318,7 +318,7 @@ class AddonManager {
 
     const manifest = this.validateManifest(response.data);
     if (this.builtInIds.has(manifest.id)) {
-      throw createPublicError('That manifest id is reserved by Cvm Turan');
+      throw createPublicError('That manifest id is reserved by TShow');
     }
 
     return {
@@ -522,7 +522,7 @@ class AddonManager {
           name: 'Player test · 540p',
           title: 'Flower · MDN CC0 sample',
           description: 'Short public CC0 sample for testing browser video playback.',
-          source: 'Cvm Turan demo'
+          source: 'TShow demo'
         }]
       };
     }

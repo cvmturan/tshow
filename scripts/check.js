@@ -48,7 +48,10 @@ for (const required of [
   'public/index.html',
   'public/css/main.css',
   'public/js/app.js',
-  'public/assets/favicon.svg'
+  'public/assets/favicon.svg',
+  'public/assets/tshow-logo.png',
+  'public/manifest.webmanifest',
+  'public/sw.js'
 ]) {
   if (!fs.existsSync(path.join(root, required))) {
     failed = true;

@@ -4,30 +4,61 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#090a0d">
-    <meta name="description" content="Cvm Turan is a local-first cinematic media browser with manual add-on support.">
-    <title>Cvm Turan · Your cinematic library</title>
-    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+    <meta name="description" content="TShow is a private, local-first movie and series discovery app with manual add-on support.">
+    <meta name="application-name" content="TShow">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TShow">
+    <title>TShow · Movies, series and trailers</title>
+    <link rel="icon" href="/assets/tshow-icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="/assets/tshow-icon-192.png">
+    <link rel="manifest" href="/manifest.webmanifest">
     <link rel="stylesheet" href="/css/main.css">
     <script src="/vendor/hls/hls.min.js" defer></script>
-    <script src="/js/app.js?v=20260903-1" defer></script>
+    <script src="/js/app.js?v=20260904-1" defer></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
 
-    <header class="site-header" id="site-header">
-        <button class="brand nav-trigger" type="button" data-view="home" aria-label="Cvm Turan home">
-            <span class="brand-mark" aria-hidden="true">CT</span>
-            <span class="brand-name">Cvm <span>Turan</span></span>
+    <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
+    <aside class="site-sidebar" id="site-sidebar" aria-label="Main menu">
+        <button class="brand nav-trigger" type="button" data-view="home" aria-label="TShow home">
+            <img class="brand-logo" src="/assets/tshow-logo.png" alt="">
+            <span class="brand-name">T<span>Watch</span></span>
         </button>
 
-        <nav class="primary-nav" aria-label="Primary navigation">
-            <button class="nav-link is-active" type="button" data-view="home">Home</button>
+        <nav class="sidebar-nav" aria-label="Browse TShow">
+            <p class="sidebar-label">Browse</p>
+            <button class="nav-link is-active" type="button" data-view="home"><span aria-hidden="true">⌂</span> Home</button>
+            <button class="nav-link" type="button" data-browse-collection="movies"><span aria-hidden="true">◉</span> Movies</button>
+            <button class="nav-link" type="button" data-browse-collection="series"><span aria-hidden="true">▣</span> Series</button>
             <button class="nav-link" type="button" data-view="list">
-                My list
+                <span aria-hidden="true">＋</span> My list
                 <span class="nav-count" id="list-count" hidden>0</span>
             </button>
-            <button class="nav-link" type="button" data-view="addons">Add-ons</button>
+
+            <p class="sidebar-label">Your services</p>
+            <button class="nav-link" type="button" data-view="addons"><span aria-hidden="true">◇</span> Add-ons</button>
+            <button class="nav-link" type="button" id="open-local-button"><span aria-hidden="true">↥</span> Open video</button>
+            <button class="nav-link install-app-button" id="install-app-button" type="button" hidden><span aria-hidden="true">↓</span> Install app</button>
+
+            <p class="sidebar-label">Support</p>
+            <button class="nav-link" type="button" data-view="help"><span aria-hidden="true">?</span> Help & contact</button>
         </nav>
+
+        <div class="sidebar-foot">
+            <span class="privacy-pulse" aria-hidden="true"></span>
+            <div><strong>Private by design</strong><span>Add-ons stay in this browser</span></div>
+        </div>
+    </aside>
+
+    <header class="site-header" id="site-header">
+        <button class="menu-button" id="menu-button" type="button" aria-controls="site-sidebar" aria-expanded="false" aria-label="Open menu">
+            <span></span><span></span><span></span>
+        </button>
+        <button class="mobile-brand nav-trigger" type="button" data-view="home" aria-label="TShow home">
+            <img src="/assets/tshow-logo.png" alt=""><span>TShow</span>
+        </button>
 
         <form class="search-form" id="search-form" role="search">
             <label class="sr-only" for="search-input">Search movies and series</label>
@@ -45,10 +76,7 @@
             <button class="search-clear" id="search-clear" type="button" aria-label="Clear search" hidden>×</button>
         </form>
 
-        <button class="button button-quiet open-local-button" id="open-local-button" type="button">
-            <span aria-hidden="true">＋</span>
-            Open video
-        </button>
+        <time class="header-clock" id="header-clock" aria-label="Current local time"></time>
         <input id="local-video-input" type="file" accept="video/*,.mkv" hidden>
     </header>
 
@@ -58,7 +86,7 @@
                 <div class="hero-art" id="hero-art" aria-hidden="true"></div>
                 <div class="hero-scrim" aria-hidden="true"></div>
                 <div class="hero-content">
-                    <p class="eyebrow">Cvm Turan presents</p>
+                    <p class="eyebrow">Featured on TShow</p>
                     <h1 id="hero-title">Stories worth staying for.</h1>
                     <div class="hero-meta" id="hero-meta">
                         <span class="match">Live catalog</span>
@@ -66,7 +94,7 @@
                         <span class="rating-pill">Local-first</span>
                     </div>
                     <p class="hero-overview" id="hero-overview">
-                        Discover fresh movies and series from connected public metadata catalogs.
+                        Discover movies, series and official trailers across connected public metadata catalogs.
                     </p>
                     <div class="hero-actions">
                         <button class="button button-primary" id="hero-play" type="button">
@@ -110,9 +138,25 @@
                             <p class="section-kicker">Big-screen stories</p>
                             <h2>Popular movies</h2>
                         </div>
-                        <button class="text-button" type="button" data-search-type="movie">Browse movies</button>
+                        <button class="text-button" type="button" data-browse-rail="movies">See all</button>
                     </div>
                     <div class="media-rail" id="movies-rail" aria-live="polite"></div>
+                </section>
+
+                <section class="catalog-section">
+                    <div class="section-heading">
+                        <div><p class="section-kicker">New on the screen</p><h2>Latest movies</h2></div>
+                        <button class="text-button" type="button" data-browse-rail="latestMovies">See all</button>
+                    </div>
+                    <div class="media-rail" id="latest-movies-rail" aria-live="polite"></div>
+                </section>
+
+                <section class="catalog-section">
+                    <div class="section-heading">
+                        <div><p class="section-kicker">Audience favourites</p><h2>Top-rated movies</h2></div>
+                        <button class="text-button" type="button" data-browse-rail="topMovies">See all</button>
+                    </div>
+                    <div class="media-rail" id="top-movies-rail" aria-live="polite"></div>
                 </section>
 
                 <section class="catalog-section">
@@ -121,9 +165,32 @@
                             <p class="section-kicker">One more episode</p>
                             <h2>Popular series</h2>
                         </div>
-                        <button class="text-button" type="button" data-search-type="tv">Browse series</button>
+                        <button class="text-button" type="button" data-browse-rail="series">See all</button>
                     </div>
                     <div class="media-rail" id="series-rail" aria-live="polite"></div>
+                </section>
+
+                <section class="catalog-section">
+                    <div class="section-heading">
+                        <div><p class="section-kicker">Worth the binge</p><h2>Top-rated series</h2></div>
+                        <button class="text-button" type="button" data-browse-rail="topSeries">See all</button>
+                    </div>
+                    <div class="media-rail" id="top-series-rail" aria-live="polite"></div>
+                </section>
+
+                <section class="catalog-section">
+                    <div class="section-heading">
+                        <div><p class="section-kicker">Fresh episodes</p><h2>Airing today</h2></div>
+                        <button class="text-button" type="button" data-browse-rail="airingToday">See all</button>
+                    </div>
+                    <div class="media-rail" id="airing-today-rail" aria-live="polite"></div>
+                </section>
+
+                <section class="catalog-section recent-section" id="recent-section" hidden>
+                    <div class="section-heading">
+                        <div><p class="section-kicker">Your activity</p><h2>Recently viewed</h2></div>
+                    </div>
+                    <div class="media-rail" id="recent-rail"></div>
                 </section>
 
                 <section class="catalog-section addon-catalogs-section" id="addon-catalogs-section" hidden>
@@ -177,13 +244,13 @@
                 <div>
                     <p class="eyebrow">Provider control center</p>
                     <h1>Manual add-ons</h1>
-                    <p>Connect Stremio-compatible manifests you trust. User-added sources open only on your device through an external player, source app, or provider page.</p>
+                    <p>Connect compatible manifests you trust. User-added sources open only on your device through an external player, source app, or provider page.</p>
                 </div>
                 <div class="status-card">
                     <span class="status-dot" aria-hidden="true"></span>
                     <div>
                         <strong id="addon-count">0 add-ons</strong>
-                        <span>Stored on this computer</span>
+                        <span>Stored in this browser</span>
                     </div>
                 </div>
             </div>
@@ -219,7 +286,7 @@
 
                     <div class="legal-note">
                         <span aria-hidden="true">✓</span>
-                        <p>Use public-domain, licensed, or personally owned media only. Cvm Turan does not include torrent or piracy providers.</p>
+                        <p>Use public-domain, licensed, or personally owned media only. TShow does not include torrent or piracy providers.</p>
                     </div>
                 </section>
 
@@ -239,14 +306,14 @@
                             <span>2</span>
                             <div>
                                 <strong>Install and review</strong>
-                                <p>Cvm Turan validates the manifest and shows the resources it requests.</p>
+                                <p>TShow validates the manifest and shows the resources it requests.</p>
                             </div>
                         </li>
                         <li>
                             <span>3</span>
                             <div>
                                 <strong>Choose a stream</strong>
-                                <p>On a title, Play lists sources privately. User-added video opens directly on your device and never passes through Cvm Turan.</p>
+                        <p>On a title, Play lists sources privately. User-added video opens directly on your device and never passes through TShow.</p>
                             </div>
                         </li>
                     </ol>
@@ -263,14 +330,66 @@
                 </div>
                 <div class="addon-grid" id="addon-grid" aria-live="polite"></div>
             </section>
+
+            <section class="installed-section backup-section" aria-labelledby="backup-title">
+                <div>
+                    <p class="section-kicker">Portable settings</p>
+                    <h2 id="backup-title">Back up this browser</h2>
+                    <p>Export your add-ons and list to a JSON file, then restore them on another browser. No account is required.</p>
+                </div>
+                <div class="backup-actions">
+                    <button class="button button-secondary" id="export-data-button" type="button">Export backup</button>
+                    <button class="button button-quiet" id="import-data-button" type="button">Import backup</button>
+                    <input id="import-data-input" type="file" accept="application/json,.json" hidden>
+                </div>
+            </section>
+        </section>
+
+        <section class="view page-view help-view" id="help-view" data-view-panel="help" hidden>
+            <div class="page-heading help-heading">
+                <div><p class="eyebrow">Support</p><h1>Help & contact</h1><p>Get help with playback or add-ons, report a problem, or send a copyright complaint.</p></div>
+            </div>
+
+            <div class="help-layout">
+                <section class="faq-panel" aria-labelledby="faq-title">
+                    <p class="section-kicker">Quick answers</p><h2 id="faq-title">Frequently asked questions</h2>
+                    <details><summary>Why does a title show no playable source?</summary><p>TShow provides discovery and trailers. Playback depends on the sources returned by add-ons you choose to install.</p></details>
+                    <details><summary>Are my add-ons shared with other users?</summary><p>No. Their addresses are stored in this browser and restored only for this browser. Clearing site data removes them.</p></details>
+                    <details><summary>Can an add-on run code on my device?</summary><p>TShow reads validated JSON responses. It does not insert add-on HTML or JavaScript into the page, and unsafe protocols are blocked.</p></details>
+                    <details><summary>How do I install TShow?</summary><p>Use “Install app” in the menu. On iPhone, open the site in Safari, tap Share, then Add to Home Screen.</p></details>
+                </section>
+
+                <section class="contact-panel" aria-labelledby="contact-title">
+                    <p class="section-kicker">Send a message</p><h2 id="contact-title">Contact TShow</h2>
+                    <form class="contact-form" id="contact-form">
+                        <label for="contact-type">What can we help with?</label>
+                        <select id="contact-type" name="type" required>
+                            <option value="support">Technical support</option>
+                            <option value="feedback">Feedback</option>
+                            <option value="copyright">Copyright complaint</option>
+                            <option value="security">Security report</option>
+                        </select>
+                        <label for="contact-name">Your name</label>
+                        <input id="contact-name" name="name" maxlength="80" autocomplete="name" required>
+                        <label for="contact-email">Your email</label>
+                        <input id="contact-email" name="email" type="email" maxlength="254" autocomplete="email" required>
+                        <label for="contact-message">Message</label>
+                        <textarea id="contact-message" name="message" rows="7" minlength="10" maxlength="4000" required></textarea>
+                        <label class="honeypot" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
+                        <label class="contact-consent"><input name="consent" type="checkbox" required><span>I understand this message and my email address will be sent to TShow support.</span></label>
+                        <button class="button button-primary" id="contact-submit" type="submit">Send message</button>
+                        <p class="form-status" id="contact-status" role="status" aria-live="polite"></p>
+                    </form>
+                </section>
+            </div>
         </section>
     </main>
 
     <footer class="site-footer">
         <div>
-            <span class="brand-name footer-brand">Cvm <span>Turan</span></span>
+            <span class="brand-name footer-brand">T<span>Watch</span></span>
             <p>A private, local-first interface for metadata and sources you are allowed to use.</p>
-            <p class="copyright">© 2026 Cvm Turan. All rights reserved.</p>
+            <p class="copyright">© 2026 TShow. All rights reserved.</p>
         </div>
         <div class="footer-legal">
             <p class="attribution">Metadata and images come from configured public catalog providers and <a href="https://www.tvmaze.com" target="_blank" rel="noopener noreferrer">TVmaze</a> under CC BY-SA. This product uses the TMDB API when configured but is not endorsed or certified by TMDB.</p>
@@ -279,6 +398,7 @@
                 <a href="/legal.html#privacy">Privacy</a>
                 <a href="/legal.html#copyright">Copyright</a>
                 <a href="/legal.html#notice">Legal notice</a>
+                <button class="footer-link nav-trigger" type="button" data-view="help">Contact</button>
             </nav>
         </div>
     </footer>
@@ -292,7 +412,7 @@
         <div class="player-topbar">
             <div>
                 <p class="section-kicker">Now playing</p>
-                <h2 id="player-title">Cvm Turan player</h2>
+                <h2 id="player-title">TShow player</h2>
             </div>
             <button class="dialog-close player-close" id="player-close" type="button" aria-label="Close player">×</button>
         </div>

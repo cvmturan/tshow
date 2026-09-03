@@ -1,6 +1,6 @@
-# Cvm Turan
+# TShow
 
-Cvm Turan is a local-first cinematic movie and series browser. It combines a polished streaming-style interface with a manual, Stremio-compatible add-on system while keeping playback limited to public-domain, licensed, or user-owned sources.
+TShow is a local-first movie and series discovery PWA. It combines a polished streaming-style interface, expanded discovery rails, a private watchlist, browser backups, and a manual Stremio-compatible add-on system while keeping playback limited to public-domain, licensed, or user-owned sources.
 
 It works immediately with a fresh public metadata catalog, an offline fallback, and a short public CC0 player-test video. A TMDB key is optional.
 
@@ -19,12 +19,12 @@ It works immediately with a fresh public metadata catalog, an offline fallback, 
 
 The dependencies have already been installed for this project.
 
-1. Double-click **Start StreamFlix.cmd** (the launcher keeps its legacy filename).
+1. Double-click **Start TShow.cmd** (the launcher keeps its legacy filename).
 2. Your browser opens [http://127.0.0.1:3000](http://127.0.0.1:3000).
-3. Keep the small server window open while using Cvm Turan.
+3. Keep the small server window open while using TShow.
 4. Close that window, or press **Ctrl+C**, to stop the app.
 
-If dependencies are ever removed, double-click **Setup StreamFlix.cmd** once, then start again.
+If dependencies are ever removed, double-click **Setup TShow.cmd** once, then start again.
 
 ### Standard Node.js commands
 
@@ -47,7 +47,7 @@ npm test
 
 1. Copy `.env.example` to `.env`.
 2. Put your TMDB API key after `TMDB_API_KEY=`.
-3. Restart Cvm Turan.
+3. Restart TShow.
 
 Without a key, the app uses its live public catalog first and falls back to built-in metadata rather than failing.
 
@@ -59,13 +59,13 @@ Open **Add-ons** in the header and paste a trusted manifest URL, for example:
 https://your-provider.example/manifest.json
 ```
 
-Standard `stremio://host/path/manifest.json` install links are also accepted and are safely normalized to HTTPS. Cvm Turan validates every redirect destination and blocks private-network targets by default.
+Standard `stremio://host/path/manifest.json` install links are also accepted and are safely normalized to HTTPS. TShow validates every redirect destination and blocks private-network targets by default.
 
 Installed manifest URLs are saved in that browser's local storage and restored automatically after a refresh, redeploy, or Render cold start. They are isolated by a random browser identifier, so a different browser or device cannot list, use, or remove them. This is anonymous browser-level storage, not account synchronization; clearing site data removes the saved list.
 
 Search providers are separate from playback providers. Official Cinemeta movie/series search and TVmaze series search are permanent protected providers. Search also queries any browser-installed add-on that explicitly declares a search catalog. A slow or unavailable provider is skipped without hiding results returned by the others.
 
-Catalog add-ons create home-screen rows. Stream-only add-ons appear when **Play** checks a title, but do not add movie rows by themselves. Sources from a user-installed add-on are external-only: safe HTTP/HTTPS links can be opened in VLC or Outplayer or copied, valid BitTorrent info hashes can be handed to a compatible app, and provider pages open separately. Cvm Turan does not proxy, download, cache, transcode, or subtitle-relay content from a user-installed add-on. It still fetches that add-on's manifest and catalog, metadata, and stream-description JSON so the interface can list its results.
+Catalog add-ons create home-screen rows. Stream-only add-ons appear when **Play** checks a title, but do not add movie rows by themselves. Sources from a user-installed add-on are external-only: safe HTTP/HTTPS links can be opened in VLC or Outplayer or copied, valid BitTorrent info hashes can be handed to a compatible app, and provider pages open separately. TShow does not proxy, download, cache, transcode, or subtitle-relay content from a user-installed add-on. It still fetches that add-on's manifest and catalog, metadata, and stream-description JSON so the interface can list its results.
 
 Built-in lawful player sources, local files, and official trailers can still play in the browser. Unsafe protocols, local-network destinations, and malformed source-app links remain blocked. The Terms, Privacy Policy, Copyright Policy, legal notice, and provider credits are published at `/legal.html`.
 
@@ -116,4 +116,4 @@ Optional Real-Debrid, AllDebrid, Premiumize, and TorBox tokens can be placed in 
 - Browser local storage — each browser's private list of installed manifest URLs
 - `tests/` — local API and security smoke tests
 
-Cvm Turan uses original branding and does not copy Netflix artwork or trademarks. TMDB metadata and images are used only when configured; the app is not endorsed or certified by TMDB.
+TShow uses original branding and does not copy Netflix artwork or trademarks. TMDB metadata and images are used only when configured; the app is not endorsed or certified by TMDB.

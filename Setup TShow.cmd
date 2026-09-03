@@ -27,6 +27,6 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
-echo StreamFlix is ready. Double-click Start StreamFlix.cmd.
+echo TShow is ready. Double-click Start TShow.cmd.
 pause
 

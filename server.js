@@ -12,6 +12,7 @@ const debridRoutes = require('./src/api/debrid');
 const streamRoutes = require('./src/api/streams');
 const proxyRoutes = require('./src/api/proxy');
 const transcodeRoutes = require('./src/api/transcode');
+const contactRoutes = require('./src/api/contact');
 const addonManager = require('./src/core/addonManager');
 const sampleData = require('./src/core/sampleData');
 
@@ -70,7 +71,7 @@ function createApp() {
     res.json({
       status: 'ok',
       timestamp: new Date().toISOString(),
-      version: '1.1.0',
+      version: '1.2.0',
       hostScope: 'local',
       addonsLoaded: addonManager.getManifests().length,
       tmdbConfigured: Boolean(process.env.TMDB_API_KEY)
@@ -85,6 +86,7 @@ function createApp() {
   app.use('/api/addons', addonRoutes);
   app.use('/api/debrid', debridRoutes);
   app.use('/api/streams', streamRoutes);
+  app.use('/api/contact', contactRoutes);
   app.use('/api', (req, res) => res.status(404).json({ error: 'API route not found' }));
 
   app.use('/vendor/hls', express.static(path.join(__dirname, 'node_modules', 'hls.js', 'dist'), {
@@ -124,7 +126,7 @@ async function startServer(options = {}) {
     const server = app.listen(port, host, () => {
       const address = server.address();
       const activePort = typeof address === 'object' ? address.port : port;
-      console.log(`Cvm Turan is ready at http://${host}:${activePort}`);
+      console.log(`TShow is ready at http://${host}:${activePort}`);
       resolve(server);
     });
     server.once('error', reject);
@@ -133,7 +135,7 @@ async function startServer(options = {}) {
 
 if (require.main === module) {
   startServer().catch((error) => {
-    console.error('Could not start Cvm Turan:', error.message);
+    console.error('Could not start TShow:', error.message);
     process.exitCode = 1;
   });
 }

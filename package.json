@@ -1,8 +1,8 @@
 {
-  "name": "streamflix",
-  "version": "1.1.0",
+  "name": "tshow",
+  "version": "1.2.0",
   "private": true,
-  "description": "A local-first cinematic media browser with manual Stremio-compatible add-ons",
+  "description": "TShow: a local-first movie and series discovery PWA with manual add-ons",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

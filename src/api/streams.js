@@ -132,7 +132,7 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0, options 
     playbackMode = 'external-player';
     unsupportedReason = headerPayload
       ? 'This source requires provider-specific headers and may not work in every external player.'
-      : 'User-installed sources open directly on this device and are never relayed through Cvm Turan.';
+      : 'User-installed sources open directly on this device and are never relayed through TShow.';
   } else if (sourceURL) {
     if (notWebReady && format === 'archive') {
       unsupportedReason = 'Archive and download-pack sources cannot be played in the browser.';
@@ -151,7 +151,7 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0, options 
   } else if (appURL || stream.infoHash || stream.fileIdx !== undefined) {
     playbackMode = appURL ? 'external-app' : 'unsupported';
     unsupportedReason = appURL
-      ? 'Torrent source available to an external app. Cvm Turan does not download, proxy, or transcode it.'
+      ? 'Torrent source available to an external app. TShow does not download, proxy, or transcode it.'
       : 'This torrent source did not include a valid magnet link or info hash.';
   } else if (
     Array.isArray(stream.zipUrls) ||
