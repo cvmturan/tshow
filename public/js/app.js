@@ -2194,8 +2194,8 @@
     }
 
     function renderAddons() {
-        const count = state.addons.length;
-        elements.addonCount.textContent = pluralize(count, 'add-on');
+        const count = state.addons.filter((addon) => addon.isCustom).length;
+        elements.addonCount.textContent = pluralize(count, 'private add-on');
 
         const cards = state.addons.map((addon) => {
             const card = makeElement('article', 'addon-card');
