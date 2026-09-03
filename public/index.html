@@ -9,7 +9,7 @@
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/main.css">
     <script src="/vendor/hls/hls.min.js" defer></script>
-    <script src="/js/app.js?v=20260822-4" defer></script>
+    <script src="/js/app.js?v=20260903-1" defer></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
@@ -177,7 +177,7 @@
                 <div>
                     <p class="eyebrow">Provider control center</p>
                     <h1>Manual add-ons</h1>
-                    <p>Connect Stremio-compatible manifests you trust. Cvm Turan only plays direct browser-safe web video links.</p>
+                    <p>Connect Stremio-compatible manifests you trust. User-added sources open only on your device through an external player, source app, or provider page.</p>
                 </div>
                 <div class="status-card">
                     <span class="status-dot" aria-hidden="true"></span>
@@ -211,6 +211,10 @@
                             <button class="button button-primary" id="install-addon-button" type="submit">Install</button>
                         </div>
                         <p class="field-help" id="manifest-url-help">HTTPS manifest links and <code>stremio://</code> install links are accepted. HTTPS is recommended; local-network URLs are blocked by default for safety.</p>
+                        <label class="addon-consent">
+                            <input id="addon-legal-agreement" name="legalAgreement" type="checkbox" required>
+                            <span>I confirm that I am authorized to use this add-on and accept the <a href="/legal.html#terms" target="_blank" rel="noopener">Terms of Use</a>.</span>
+                        </label>
                     </form>
 
                     <div class="legal-note">
@@ -242,7 +246,7 @@
                             <span>3</span>
                             <div>
                                 <strong>Choose a stream</strong>
-                                <p>On a title, Play checks installed add-ons for direct HTTP or HTTPS video.</p>
+                                <p>On a title, Play lists sources privately. User-added video opens directly on your device and never passes through Cvm Turan.</p>
                             </div>
                         </li>
                     </ol>
@@ -268,7 +272,15 @@
             <p>A private, local-first interface for metadata and sources you are allowed to use.</p>
             <p class="copyright">© 2026 Cvm Turan. All rights reserved.</p>
         </div>
-        <p class="attribution">Metadata and images come from configured public catalog providers, <a href="https://www.tvmaze.com" target="_blank" rel="noopener noreferrer">TVmaze</a>, and TMDB when enabled. Cvm Turan is not endorsed by those providers.</p>
+        <div class="footer-legal">
+            <p class="attribution">Metadata and images come from configured public catalog providers and <a href="https://www.tvmaze.com" target="_blank" rel="noopener noreferrer">TVmaze</a> under CC BY-SA. This product uses the TMDB API when configured but is not endorsed or certified by TMDB.</p>
+            <nav aria-label="Legal links">
+                <a href="/legal.html#terms">Terms</a>
+                <a href="/legal.html#privacy">Privacy</a>
+                <a href="/legal.html#copyright">Copyright</a>
+                <a href="/legal.html#notice">Legal notice</a>
+            </nav>
+        </div>
     </footer>
 
     <dialog class="media-dialog" id="details-dialog" aria-labelledby="details-title">
@@ -336,6 +348,8 @@
                 <div>
                     <button class="button button-quiet" id="open-in-vlc" type="button">Open in VLC</button>
                     <button class="button button-quiet" id="open-in-outplayer" type="button">Open in Outplayer</button>
+                    <button class="button button-quiet" id="open-in-source-app" type="button" hidden>Open source app</button>
+                    <button class="button button-quiet" id="copy-source-link" type="button">Copy source link</button>
                 </div>
             </div>
             <div class="speed-control subtitle-control">
