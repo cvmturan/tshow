@@ -81,6 +81,18 @@ test('health endpoint reports a ready local server', async () => {
   assert.equal(data.tmdbConfigured, false);
 });
 
+test('watch-provider endpoint validates ids and degrades safely without a TMDB key', async () => {
+  const invalid = await fetch(`${baseURL}/api/tmdb/watch-providers/movie/not-a-number`);
+  assert.equal(invalid.status, 400);
+
+  const response = await fetch(`${baseURL}/api/tmdb/watch-providers/movie/550?country=IN`);
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.country, 'IN');
+  assert.match(body.attribution, /JustWatch/);
+  assert.ok(body.providers && Array.isArray(body.providers.stream));
+});
+
 test('debrid account routes are disabled without a server access key', async () => {
   const { response, data } = await getJSON('/api/debrid/services');
   assert.equal(response.status, 403);
@@ -541,7 +553,9 @@ test('HTML app is served with a strict same-origin security policy', async () =>
   const response = await fetch(`${baseURL}/`);
   const html = await response.text();
   assert.equal(response.status, 200);
-  assert.match(html, /Manual add-ons/);
+  assert.match(html, /Make TShow yours/);
+  assert.match(html, /id="calendar-view"/);
+  assert.match(html, /id="addon-filter-group"/);
   assert.match(html, /TShow/);
   assert.match(html, /id="trailer-frame"/);
   assert.match(html, /id="try-direct-source"/);

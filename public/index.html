@@ -14,9 +14,9 @@
     <link rel="icon" href="/assets/tshow-icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="/assets/tshow-icon-192.png">
     <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="stylesheet" href="/css/main.css?v=20260904-4">
+    <link rel="stylesheet" href="/css/main.css?v=20260905-1">
     <script src="/vendor/hls/hls.min.js" defer></script>
-    <script src="/js/app.js?v=20260904-4" defer></script>
+    <script src="/js/app.js?v=20260905-1" defer></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
@@ -37,6 +37,8 @@
                 <span aria-hidden="true">＋</span> My list
                 <span class="nav-count" id="list-count" hidden>0</span>
             </button>
+            <button class="nav-link" type="button" data-view="calendar"><span aria-hidden="true">▦</span> Calendar</button>
+            <button class="nav-link" type="button" data-view="history"><span aria-hidden="true">↺</span> History</button>
 
             <p class="sidebar-label">Your services</p>
             <button class="nav-link" type="button" data-view="addons"><span aria-hidden="true">◇</span> Add-ons</button>
@@ -240,12 +242,33 @@
             </div>
         </section>
 
+        <section class="view page-view" id="calendar-view" data-view-panel="calendar" hidden>
+            <div class="page-heading">
+                <div><p class="eyebrow">Your schedule</p><h1>Calendar</h1><p>Series in your list, grouped by the dates available from connected catalogs.</p></div>
+            </div>
+            <div class="calendar-board" id="calendar-board"></div>
+            <div class="empty-state" id="calendar-empty" hidden>
+                <span class="empty-icon" aria-hidden="true">▦</span><h2>No series scheduled yet</h2>
+                <p>Add series to My list. Release and air dates appear here when a catalog provides them.</p>
+                <button class="button button-primary" type="button" data-browse-collection="series">Browse series</button>
+            </div>
+        </section>
+
+        <section class="view page-view" id="history-view" data-view-panel="history" hidden>
+            <div class="page-heading history-heading">
+                <div><p class="eyebrow">Private activity</p><h1>History</h1><p>Recently opened titles stored only in this browser.</p></div>
+                <button class="button button-quiet" id="clear-history" type="button">Clear history</button>
+            </div>
+            <div class="media-grid" id="history-grid"></div>
+            <div class="empty-state" id="history-empty" hidden><span class="empty-icon" aria-hidden="true">↺</span><h2>Nothing viewed yet</h2><p>Titles you open will appear here.</p></div>
+        </section>
+
         <section class="view page-view addons-view" id="addons-view" data-view-panel="addons" hidden>
             <div class="page-heading addons-heading">
                 <div>
-                    <p class="eyebrow">Provider control center</p>
-                    <h1>Manual add-ons</h1>
-                    <p>Connect compatible manifests you trust. User-added sources open only on your device through an external player, source app, or provider page.</p>
+                    <p class="eyebrow">Add-on studio</p>
+                    <h1>Make TShow yours</h1>
+                    <p>Extend search, metadata, subtitles and viewing options with compatible add-ons you trust. Your choices stay in this browser.</p>
                 </div>
                 <div class="status-card">
                     <span class="status-dot" aria-hidden="true"></span>
@@ -256,29 +279,40 @@
                 </div>
             </div>
 
+            <div class="addon-toolbar" aria-label="Filter installed add-ons">
+                <div class="addon-filter-group" id="addon-filter-group">
+                    <button class="addon-filter is-active" type="button" data-addon-filter="all">All</button>
+                    <button class="addon-filter" type="button" data-addon-filter="catalog">Catalogs</button>
+                    <button class="addon-filter" type="button" data-addon-filter="stream">Watch options</button>
+                    <button class="addon-filter" type="button" data-addon-filter="subtitles">Subtitles</button>
+                    <button class="addon-filter" type="button" data-addon-filter="custom">My add-ons</button>
+                </div>
+                <label class="addon-search"><span aria-hidden="true">⌕</span><span class="sr-only">Search installed add-ons</span><input id="addon-search" type="search" placeholder="Find an add-on" maxlength="80"></label>
+            </div>
+
             <div class="addons-layout">
                 <section class="install-panel" aria-labelledby="install-title">
                     <span class="panel-number" aria-hidden="true">01</span>
                     <p class="section-kicker">Connect a source</p>
-                    <h2 id="install-title">Install an add-on</h2>
-                    <p class="panel-copy">Paste an HTTPS <code>manifest.json</code> address or a <code>stremio://</code> add-on link from a source you are authorized to use.</p>
+                    <h2 id="install-title">Install from a link</h2>
+                    <p class="panel-copy">Paste a compatible HTTPS <code>manifest.json</code> address from a source you are authorized to use.</p>
 
                     <form id="addon-form" class="addon-form">
-                        <label for="manifest-url">Manifest URL or Stremio link</label>
+                        <label for="manifest-url">Add-on manifest URL</label>
                         <div class="url-field">
                             <input
                                 id="manifest-url"
                                 name="manifestURL"
                                 type="url"
                                 inputmode="url"
-                                placeholder="https://example.com/manifest.json or stremio://…"
+                                placeholder="https://example.com/manifest.json"
                                 maxlength="8192"
                                 aria-describedby="manifest-url-help"
                                 required
                             >
                             <button class="button button-primary" id="install-addon-button" type="submit">Install</button>
                         </div>
-                        <p class="field-help" id="manifest-url-help">HTTPS manifest links and <code>stremio://</code> install links are accepted. HTTPS is recommended; local-network URLs are blocked by default for safety.</p>
+                        <p class="field-help" id="manifest-url-help">Compatible install links are accepted too. HTTPS is recommended; local-network URLs are blocked by default for safety.</p>
                         <label class="addon-consent">
                             <input id="addon-legal-agreement" name="legalAgreement" type="checkbox" required>
                             <span>I confirm that I am authorized to use this add-on and accept the <a href="/legal.html#terms" target="_blank" rel="noopener">Terms of Use</a>.</span>
@@ -300,7 +334,7 @@
                             <span>1</span>
                             <div>
                                 <strong>Copy the manifest</strong>
-                                <p>Get the complete HTTPS manifest address or <code>stremio://</code> install link from the add-on publisher.</p>
+                                <p>Get the complete manifest address from the add-on publisher.</p>
                             </div>
                         </li>
                         <li>
