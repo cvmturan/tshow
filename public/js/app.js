@@ -399,14 +399,15 @@
                 state.movies[0] ||
                 state.series[0] ||
                 null;
+            const homeRows = buildUniqueHomeRows(state.featured ? [state.featured] : []);
             renderHero(state.featured);
-            renderRail(elements.trendingRail, state.trending);
-            renderRail(elements.moviesRail, state.movies);
-            renderRail(elements.seriesRail, state.series);
-            renderRail(elements.latestMoviesRail, state.latestMovies);
-            renderRail(elements.topMoviesRail, state.topMovies);
-            renderRail(elements.topSeriesRail, state.topSeries);
-            renderRail(elements.airingTodayRail, state.airingToday);
+            renderRail(elements.trendingRail, homeRows.trending);
+            renderRail(elements.moviesRail, homeRows.movies);
+            renderRail(elements.latestMoviesRail, homeRows.latestMovies);
+            renderRail(elements.topMoviesRail, homeRows.topMovies);
+            renderRail(elements.seriesRail, homeRows.series);
+            renderRail(elements.topSeriesRail, homeRows.topSeries);
+            renderRail(elements.airingTodayRail, homeRows.airingToday);
             elements.catalogMode.textContent = catalogLabel;
         } catch (error) {
             [elements.trendingRail, elements.moviesRail, elements.seriesRail, elements.latestMoviesRail,
@@ -447,6 +448,46 @@
             Number(right.vote_average || 0) - Number(left.vote_average || 0) ||
             Number(right.popularity || 0) - Number(left.popularity || 0)
         );
+    }
+
+    function buildUniqueHomeRows(reservedItems = [], limit = 20) {
+        const seen = new Set(reservedItems.map(homeMediaIdentity).filter(Boolean));
+        const takeUnique = (items) => {
+            const selected = [];
+            for (const item of items) {
+                const key = homeMediaIdentity(item);
+                if (!key || seen.has(key)) continue;
+                seen.add(key);
+                selected.push(item);
+                if (selected.length === limit) break;
+            }
+            return selected;
+        };
+
+        return {
+            trending: takeUnique(state.trending),
+            movies: takeUnique(state.movies),
+            latestMovies: takeUnique(state.latestMovies),
+            topMovies: takeUnique(state.topMovies),
+            series: takeUnique(state.series),
+            topSeries: takeUnique(state.topSeries),
+            airingToday: takeUnique(state.airingToday)
+        };
+    }
+
+    function homeMediaIdentity(media) {
+        const type = mediaType(media);
+        const rawId = String(media.imdb_id || media._stremioId || media.id || '').trim().toLowerCase();
+        const imdbId = rawId.match(/tt\d+/)?.[0];
+        if (imdbId) return `${type}:imdb:${imdbId}`;
+
+        const title = mediaTitle(media)
+            .toLocaleLowerCase()
+            .normalize('NFKD')
+            .replace(/[^a-z0-9]+/g, ' ')
+            .trim();
+        const year = mediaYear(media);
+        return title ? `${type}:title:${title}:${year}` : `${type}:id:${rawId}`;
     }
 
     function normalizeLiveCatalog(data, descriptor) {
