@@ -2451,6 +2451,22 @@ code {
     background: rgba(8, 9, 12, 0.97);
     box-shadow: 18px 0 60px rgba(0, 0, 0, 0.18);
     backdrop-filter: blur(20px);
+    transform: translateX(calc(-100% - 24px));
+    visibility: hidden;
+    transition:
+        transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+        visibility 0s linear 300ms;
+    will-change: transform;
+}
+
+body.sidebar-open {
+    overflow: hidden;
+}
+
+body.sidebar-open .site-sidebar {
+    transform: translateX(0);
+    visibility: visible;
+    transition-delay: 0s;
 }
 
 .site-sidebar .brand {
@@ -2544,21 +2560,72 @@ code {
     box-shadow: 0 0 0 5px rgba(117, 217, 155, 0.1);
 }
 
-.sidebar-scrim,
-.menu-button,
 .mobile-brand {
     display: none;
 }
 
+.sidebar-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    background: rgba(0, 0, 0, 0.58);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    backdrop-filter: blur(3px);
+    transition:
+        opacity 240ms ease,
+        visibility 0s linear 240ms;
+}
+
+body.sidebar-open .sidebar-scrim {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
+}
+
+.menu-button {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    place-content: center;
+    gap: 4px;
+    padding: 0;
+    border-radius: 11px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.menu-button span {
+    width: 18px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--text);
+    transform-origin: center;
+    transition: transform 220ms ease, opacity 160ms ease;
+}
+
+body.sidebar-open .menu-button span:nth-child(1) {
+    transform: translateY(6px) rotate(45deg);
+}
+
+body.sidebar-open .menu-button span:nth-child(2) {
+    opacity: 0;
+}
+
+body.sidebar-open .menu-button span:nth-child(3) {
+    transform: translateY(-6px) rotate(-45deg);
+}
+
 body:not(.legal-page) .site-header {
-    left: 236px;
-    grid-template-columns: minmax(260px, 560px) auto;
+    left: 0;
+    grid-template-columns: auto minmax(260px, 560px) auto;
     justify-content: space-between;
 }
 
 body:not(.legal-page) main,
 body:not(.legal-page) .site-footer {
-    margin-left: 236px;
+    margin-left: 0;
 }
 
 .header-clock {
@@ -2636,6 +2703,30 @@ body:not(.legal-page) .site-footer {
     gap: 9px;
 }
 
+.contact-addresses {
+    display: grid;
+    gap: 7px;
+    margin: -8px 0 18px;
+}
+
+.contact-addresses a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.025);
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.contact-addresses strong {
+    color: var(--text);
+    font-weight: 750;
+}
+
 .contact-form label:not(.contact-consent):not(.honeypot) {
     margin-top: 7px;
     color: var(--muted-strong);
@@ -2711,25 +2802,6 @@ body:not(.legal-page) .site-footer {
 
     .site-sidebar {
         width: min(86vw, 290px);
-        transform: translateX(-105%);
-        transition: transform 220ms ease;
-    }
-
-    body.sidebar-open {
-        overflow: hidden;
-    }
-
-    body.sidebar-open .site-sidebar {
-        transform: translateX(0);
-    }
-
-    .sidebar-scrim:not([hidden]) {
-        position: fixed;
-        inset: 0;
-        z-index: 1100;
-        display: block;
-        background: rgba(0, 0, 0, 0.62);
-        backdrop-filter: blur(4px);
     }
 
     body:not(.legal-page) .site-header {
@@ -2744,24 +2816,6 @@ body:not(.legal-page) .site-footer {
     body:not(.legal-page) main,
     body:not(.legal-page) .site-footer {
         margin-left: 0;
-    }
-
-    .menu-button {
-        display: grid;
-        width: 42px;
-        height: 42px;
-        place-content: center;
-        gap: 4px;
-        padding: 0;
-        border-radius: 11px;
-        background: rgba(255, 255, 255, 0.05);
-    }
-
-    .menu-button span {
-        width: 18px;
-        height: 2px;
-        border-radius: 2px;
-        background: var(--text);
     }
 
     .mobile-brand {
@@ -2801,6 +2855,14 @@ body:not(.legal-page) .site-footer {
     .backup-section {
         align-items: flex-start;
         flex-direction: column;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .site-sidebar,
+    .sidebar-scrim,
+    .menu-button span {
+        transition-duration: 0.01ms;
     }
 }
 
