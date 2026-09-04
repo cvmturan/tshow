@@ -43,6 +43,38 @@ npm run check
 npm test
 ```
 
+## Cloudflare Pages + Workers
+
+The repository is ready for a hybrid Cloudflare deployment:
+
+- Cloudflare Pages serves the static PWA from `dist/`.
+- A Pages Function (running on Cloudflare Workers) handles `/api/*`.
+- Safe public catalogue responses are cached at the edge.
+- Private add-on, contact, media proxy, and transcoding requests are never cached.
+- The existing Node server remains the API origin, because Workers cannot run the FFmpeg process used by TShow transcoding.
+
+### Cloudflare dashboard settings
+
+Create a Pages project connected to this GitHub repository and use:
+
+| Setting | Value |
+| --- | --- |
+| Production branch | `main` |
+| Build command | `pnpm run build:pages` |
+| Build output directory | `dist` |
+| Root directory | leave empty |
+
+Add a production and preview environment variable named `TSHOW_ORIGIN`. Set it to the HTTPS URL of the existing TShow Node server, with no trailing slash, for example `https://your-tshow-service.onrender.com`.
+
+After deployment, open `/api/cloudflare/health` on the Pages URL. A successful setup reports `edge: cloudflare-pages-functions` and `originConfigured: true`.
+
+Local Cloudflare preview commands:
+
+```powershell
+npm run build:pages
+pnpm dlx wrangler@4.128.0 pages dev --binding TSHOW_ORIGIN=https://your-tshow-service.onrender.com
+```
+
 ## Optional TMDB catalog
 
 1. Copy `.env.example` to `.env`.
