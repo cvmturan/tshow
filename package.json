@@ -7,6 +7,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "build:pages": "node scripts/build-pages.js",
+    "dev:cloudflare": "npm run build:pages && pnpm dlx wrangler@4.128.0 pages dev",
+    "deploy:cloudflare": "npm run build:pages && pnpm dlx wrangler@4.128.0 pages deploy",
     "check": "node scripts/check.js",
     "test": "node --test"
   },
