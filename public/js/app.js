@@ -3145,7 +3145,7 @@
             elements.contactStatus.textContent = error.message || 'The message could not be sent.';
             showToast(elements.contactStatus.textContent, 'error');
         } finally {
-            setButtonBusy(elements.contactSubmit, false, 'Send message');
+            setButtonBusy(elements.contactSubmit, false, 'Prepare email');
         }
     }
 
