@@ -918,7 +918,7 @@
         const actions = makeElement('div', 'details-actions');
         const playButton = makeElement('button', 'button button-primary');
         playButton.type = 'button';
-        playButton.append(makeElement('span', 'play-icon'), document.createTextNode('Play'));
+        playButton.append(makeElement('span', 'play-icon'), document.createTextNode('Watch options'));
         playButton.disabled = type === 'tv' && media._addonCatalog && !state.activeVideoId;
         playButton.addEventListener('click', () => playMedia(media, details, state.activeVideoId));
 
