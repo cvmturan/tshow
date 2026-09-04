@@ -129,10 +129,23 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0, options 
   let unsupportedReason = '';
 
   if (externalOnly && sourceURL) {
-    playbackMode = 'external-player';
-    unsupportedReason = headerPayload
-      ? 'This source requires provider-specific headers and may not work in every external player.'
-      : 'User-installed sources open directly on this device and are never relayed through TShow.';
+    const directFormat = ['mp4', 'webm', 'hls'].includes(format);
+    const secureForPage = parsedURL?.protocol === 'https:';
+    if (directFormat && secureForPage && !headerPayload && !notWebReady) {
+      browserReady = true;
+      playbackMode = format === 'hls' ? 'hls' : 'direct';
+    } else {
+      playbackMode = 'external-player';
+      unsupportedReason = headerPayload
+        ? 'This source requires provider-specific headers, so TShow will not relay it through the server.'
+        : notWebReady
+          ? 'The provider marked this source for an external app or download.'
+          : !secureForPage
+            ? 'Secure pages cannot directly play this insecure source. Open it with a trusted external player.'
+            : format
+              ? `The ${format.toUpperCase()} format is not enabled in the browser player.`
+              : 'The add-on did not identify this as a direct MP4, WebM, or HLS stream.';
+    }
   } else if (sourceURL) {
     if (notWebReady && format === 'archive') {
       unsupportedReason = 'Archive and download-pack sources cannot be played in the browser.';
@@ -165,8 +178,8 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0, options 
   let playUrl = null;
   let transcodeUrl = null;
   let transcodeLowUrl = null;
-  if (!externalOnly && browserReady && sourceURL) {
-    if (playbackMode === 'direct') {
+  if (browserReady && sourceURL) {
+    if (externalOnly || playbackMode === 'direct') {
       playUrl = sourceURL;
     } else {
       const params = new URLSearchParams({ src: sourceURL });
@@ -174,7 +187,7 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0, options 
       params.set('sig', requestSigner.signatureFor(sourceURL, headerPayload));
       playUrl = `/api/proxy/stream?${params.toString()}`;
     }
-    if (playbackMode !== 'hls') {
+    if (!externalOnly && playbackMode !== 'hls') {
       transcodeUrl = transcode.sessionPath({
         src: sourceURL,
         h: headerPayload,
@@ -230,6 +243,7 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0, options 
     notWebReady,
     unsupportedReason: unsupportedReason || null,
     subtitles: externalOnly ? [] : normalizeSubtitles(stream.subtitles),
+    directFromProvider: externalOnly && browserReady,
     behaviorHints,
     isDemo: addonId === SAMPLE_ADDON_ID,
     sourceAddon: addonId,
