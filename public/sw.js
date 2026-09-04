@@ -1,6 +1,6 @@
 'use strict';
 
-const SHELL_CACHE = 'tshow-shell-v7';
+const SHELL_CACHE = 'tshow-shell-v8';
 const SHELL_FILES = [
   '/',
   '/index.html',
