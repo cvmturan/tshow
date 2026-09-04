@@ -3128,6 +3128,16 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
+            if (result.fallback === 'mailto' && result.recipient) {
+                const params = new URLSearchParams({
+                    subject: result.subject || `[TShow ${payload.type}] Message from ${payload.name}`,
+                    body: `${payload.message}\n\nFrom: ${payload.name} <${payload.email}>`
+                });
+                elements.contactStatus.textContent = result.message || 'Opening your email app…';
+                window.location.href = `mailto:${encodeURIComponent(result.recipient)}?${params.toString()}`;
+                showToast('Your email app is ready. Press Send there to finish.', 'success');
+                return;
+            }
             elements.contactForm.reset();
             elements.contactStatus.textContent = result.message || 'Your message was sent.';
             showToast('Message sent to TShow support.');

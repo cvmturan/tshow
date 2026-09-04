@@ -1,10 +1,13 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const axios = require('axios');
-
 const router = express.Router();
-const CONTACT_EMAIL = process.env.CONTACT_EMAIL || 'cvmturan@gmail.com';
 const ALLOWED_TYPES = new Set(['support', 'feedback', 'copyright', 'security']);
+const PUBLIC_RECIPIENTS = {
+  support: 'support@showt.fun',
+  feedback: 'support@showt.fun',
+  copyright: 'copyright@showt.fun',
+  security: 'legal@showt.fun'
+};
 
 const contactLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -41,37 +44,18 @@ function validateContactInput(body = {}) {
   return { value: result };
 }
 
-router.post('/', contactLimiter, async (req, res, next) => {
+router.post('/', contactLimiter, async (req, res) => {
   const validation = validateContactInput(req.body);
   if (validation.spam) return res.status(202).json({ message: 'Your message was received.' });
   if (validation.error) return res.status(400).json({ error: validation.error });
 
   const { type, name, email, message } = validation.value;
-  const endpoint = process.env.CONTACT_FORM_ENDPOINT || `https://formsubmit.co/ajax/${encodeURIComponent(CONTACT_EMAIL)}`;
-
-  try {
-    const response = await axios.post(endpoint, {
-      name,
-      email,
-      category: type,
-      message,
-      _subject: `[TShow ${type}] Message from ${name}`,
-      _template: 'table'
-    }, {
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      timeout: 10_000,
-      maxContentLength: 128 * 1024,
-      validateStatus: (status) => status >= 200 && status < 300
-    });
-
-    if (response.data?.success === false) {
-      return res.status(502).json({ error: 'The contact service could not deliver this message.' });
-    }
-    return res.status(202).json({ message: 'Your message was sent to TShow support.' });
-  } catch (error) {
-    if (process.env.NODE_ENV !== 'test') console.error('Contact delivery failed:', error.message);
-    return next(Object.assign(new Error('The contact service is temporarily unavailable.'), { status: 502 }));
-  }
+  return res.status(200).json({
+    fallback: 'mailto',
+    recipient: PUBLIC_RECIPIENTS[type] || PUBLIC_RECIPIENTS.support,
+    subject: `[TShow ${type}] Message from ${name}`,
+    message: 'Your email app will open with this message. Press Send there to finish securely.'
+  });
 });
 
 module.exports = router;
