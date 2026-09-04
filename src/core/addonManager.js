@@ -110,6 +110,28 @@ class AddonManager {
         _source: 'built-in'
       },
       {
+        id: 'org.stremio.watchhub',
+        name: 'WatchHub',
+        version: '1.0.0',
+        description: 'Official provider availability links for movies and series. Results open on the provider or availability page.',
+        resources: ['stream'],
+        types: ['movie', 'series'],
+        idPrefixes: ['tt'],
+        manifestURL: 'https://watchhub.strem.io/manifest.json',
+        _source: 'built-in'
+      },
+      {
+        id: 'org.stremio.opensubtitlesv3',
+        name: 'OpenSubtitles v3',
+        version: '1.0.0',
+        description: 'Subtitle discovery for compatible movies and series.',
+        resources: ['subtitles'],
+        types: ['movie', 'series'],
+        idPrefixes: ['tt'],
+        manifestURL: 'https://opensubtitles-v3.strem.io/manifest.json',
+        _source: 'built-in'
+      },
+      {
         id: 'org.cvmturan.tvmaze',
         name: 'TVmaze Series Search',
         version: '1.0.0',
