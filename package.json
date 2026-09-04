@@ -8,11 +8,8 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "cf:build": "node scripts/build-cloudflare.js",
-    "precf:dev": "pnpm run cf:build",
     "cf:dev": "wrangler dev",
-    "precf:deploy": "pnpm run cf:build",
     "cf:deploy": "wrangler deploy",
-    "precf:check": "pnpm run cf:build",
     "cf:check": "wrangler deploy --dry-run",
     "check": "node scripts/check.js",
     "test": "node --test"

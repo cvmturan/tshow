@@ -59,8 +59,9 @@ For a repository connected through Cloudflare Workers Builds:
 
 1. Select the `cvmturan/cvmturan` repository and the `main` production branch.
 2. Use the Worker name `tshow` (it must match `wrangler.jsonc`).
-3. Leave the build command empty and use `pnpm run cf:deploy` as the deploy command. The
-   included pre-deploy step prepares the static files and bundles the HLS player library.
+3. Leave the build command empty and use the default `npx wrangler deploy` as the deploy
+   command. Wrangler automatically runs the included asset build and bundles the HLS
+   player library before every development session or deployment.
 4. Set the root directory to `/` and save/deploy.
 
 For a manual authenticated deployment, run:
