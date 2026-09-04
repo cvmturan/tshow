@@ -4,6 +4,16 @@
   "main": "./cloudflare/worker.mjs",
   "compatibility_date": "2026-09-04",
   "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "showt.fun",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.showt.fun",
+      "custom_domain": true
+    }
+  ],
   "build": {
     "command": "node scripts/build-cloudflare.js"
   },
