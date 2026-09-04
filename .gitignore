@@ -6,6 +6,9 @@ dl/
 !.env.example
 *.log
 coverage/
+dist/
+.cloudflare-check/
+.wrangler/
 .DS_Store
 Thumbs.db
 data/custom-addons.json
