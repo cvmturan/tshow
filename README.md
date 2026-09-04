@@ -43,6 +43,38 @@ npm run check
 npm test
 ```
 
+## Cloudflare deployment
+
+The production-ready Cloudflare Worker configuration is included in `wrangler.jsonc`.
+Cloudflare serves the PWA and all static assets from its global network. Requests under
+`/api/*` are forwarded to the live TShow Render service, which remains the API backend
+and rollback while the server-only routes are migrated gradually.
+
+Public movie metadata is cached briefly at the edge. Search queries, browser add-ons,
+streams, contact messages, cookies, authorization headers, and every modifying request
+are deliberately excluded from shared caching. The browser add-on identifier continues
+to pass only to the Render API, so each visitor keeps their own add-ons.
+
+For a repository connected through Cloudflare Workers Builds:
+
+1. Select the `cvmturan/cvmturan` repository and the `main` production branch.
+2. Use the Worker name `tshow` (it must match `wrangler.jsonc`).
+3. Leave the build command empty and use `pnpm run cf:deploy` as the deploy command. The
+   included pre-deploy step prepares the static files and bundles the HLS player library.
+4. Set the root directory to `/` and save/deploy.
+
+For a manual authenticated deployment, run:
+
+```powershell
+pnpm install
+pnpm run cf:check
+pnpm run cf:deploy
+```
+
+`API_ORIGIN` is intentionally fixed to `https://tshow.onrender.com`. Do not point it at
+the Cloudflare site itself, because that would create a proxy loop. Keep the Render
+service active until all Node-only API routes have been replaced.
+
 ## Optional TMDB catalog
 
 1. Copy `.env.example` to `.env`.

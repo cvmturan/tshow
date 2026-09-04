@@ -1,4 +1,6 @@
 allowBuilds:
+  esbuild: true
   ffmpeg-static: true
+  workerd: true
 overrides:
   qs: 6.16.0

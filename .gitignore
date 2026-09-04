@@ -9,3 +9,6 @@ coverage/
 .DS_Store
 Thumbs.db
 data/custom-addons.json
+.cloudflare-dist/
+.wrangler/
+public/vendor/hls/hls.min.js

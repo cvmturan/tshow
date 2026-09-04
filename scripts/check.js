@@ -5,6 +5,7 @@ const { spawnSync } = require('child_process');
 const root = path.resolve(__dirname, '..');
 const targets = [
   path.join(root, 'server.js'),
+  path.join(root, 'cloudflare'),
   path.join(root, 'src'),
   path.join(root, 'public', 'js'),
   path.join(root, 'tests')
@@ -51,7 +52,10 @@ for (const required of [
   'public/assets/favicon.svg',
   'public/assets/tshow-logo.png',
   'public/manifest.webmanifest',
-  'public/sw.js'
+  'public/sw.js',
+  'public/_headers',
+  'scripts/build-cloudflare.js',
+  'wrangler.jsonc'
 ]) {
   if (!fs.existsSync(path.join(root, required))) {
     failed = true;
