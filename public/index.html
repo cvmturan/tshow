@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#090a0d">
     <meta name="description" content="TShow is a private, local-first movie and series discovery app with manual add-on support.">
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
     <meta name="application-name" content="TShow">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -13,15 +14,15 @@
     <link rel="icon" href="/assets/tshow-icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="/assets/tshow-icon-192.png">
     <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="stylesheet" href="/css/main.css">
+    <link rel="stylesheet" href="/css/main.css?v=20260904-4">
     <script src="/vendor/hls/hls.min.js" defer></script>
-    <script src="/js/app.js?v=20260904-3" defer></script>
+    <script src="/js/app.js?v=20260904-4" defer></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
 
-    <div class="sidebar-scrim" id="sidebar-scrim" hidden></div>
-    <aside class="site-sidebar" id="site-sidebar" aria-label="Main menu">
+    <div class="sidebar-scrim" id="sidebar-scrim" aria-hidden="true"></div>
+    <aside class="site-sidebar" id="site-sidebar" aria-label="Main menu" aria-hidden="true">
         <button class="brand nav-trigger" type="button" data-view="home" aria-label="TShow home">
             <img class="brand-logo" src="/assets/tshow-logo.png" alt="">
             <span class="brand-name">T<span>Show</span></span>
@@ -361,6 +362,11 @@
 
                 <section class="contact-panel" aria-labelledby="contact-title">
                     <p class="section-kicker">Send a message</p><h2 id="contact-title">Contact TShow</h2>
+                    <div class="contact-addresses" aria-label="TShow email addresses">
+                        <a href="mailto:support@showt.fun"><span>Support</span><strong>support@showt.fun</strong></a>
+                        <a href="mailto:legal@showt.fun"><span>Legal</span><strong>legal@showt.fun</strong></a>
+                        <a href="mailto:copyright@showt.fun"><span>Copyright</span><strong>copyright@showt.fun</strong></a>
+                    </div>
                     <form class="contact-form" id="contact-form">
                         <label for="contact-type">What can we help with?</label>
                         <select id="contact-type" name="type" required>
