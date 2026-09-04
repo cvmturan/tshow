@@ -55,7 +55,9 @@
             .slice(0, 20),
         lastAddonSync: 0,
         dataSaver: false,
-        installPrompt: null
+        installPrompt: null,
+        addonFilter: 'all',
+        addonSearch: ''
     };
 
     const elements = {};
@@ -85,7 +87,7 @@
         ]);
 
         const requestedView = new URLSearchParams(window.location.search).get('view');
-        if (['home', 'list', 'addons', 'help'].includes(requestedView)) setView(requestedView);
+        if (['home', 'list', 'calendar', 'history', 'addons', 'help'].includes(requestedView)) setView(requestedView);
     }
 
     function cacheElements() {
@@ -126,6 +128,11 @@
             'refresh-addon-catalogs',
             'list-grid',
             'list-empty',
+            'calendar-board',
+            'calendar-empty',
+            'history-grid',
+            'history-empty',
+            'clear-history',
             'search-title',
             'search-summary',
             'search-grid',
@@ -136,6 +143,8 @@
             'install-addon-button',
             'refresh-addons',
             'addon-grid',
+            'addon-filter-group',
+            'addon-search',
             'export-data-button',
             'import-data-button',
             'import-data-input',
@@ -204,6 +213,36 @@
         elements.sidebarScrim.addEventListener('click', closeSidebar);
         window.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') closeSidebar();
+            if (!elements.playerDialog?.open || event.target.matches('input, textarea, select')) return;
+            if (event.key === ' ' && !elements.videoPlayer.hidden) {
+                event.preventDefault();
+                if (elements.videoPlayer.paused) elements.videoPlayer.play().catch(() => {});
+                else elements.videoPlayer.pause();
+            }
+            if (event.key.toLocaleLowerCase() === 'm') elements.videoPlayer.muted = !elements.videoPlayer.muted;
+            if (event.key.toLocaleLowerCase() === 'f' && document.fullscreenEnabled) {
+                document.fullscreenElement ? document.exitFullscreen() : elements.videoPlayer.requestFullscreen?.();
+            }
+            if (event.key.toLocaleLowerCase() === 'p' && document.pictureInPictureEnabled && !elements.videoPlayer.hidden) {
+                document.pictureInPictureElement
+                    ? document.exitPictureInPicture()
+                    : elements.videoPlayer.requestPictureInPicture?.().catch(() => {});
+            }
+        });
+
+        elements.clearHistory?.addEventListener('click', clearHistory);
+        elements.addonFilterGroup?.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-addon-filter]');
+            if (!button) return;
+            state.addonFilter = button.dataset.addonFilter || 'all';
+            elements.addonFilterGroup.querySelectorAll('[data-addon-filter]').forEach((candidate) => {
+                candidate.classList.toggle('is-active', candidate === button);
+            });
+            renderAddons();
+        });
+        elements.addonSearch?.addEventListener('input', () => {
+            state.addonSearch = elements.addonSearch.value.trim().toLocaleLowerCase();
+            renderAddons();
         });
 
         elements.searchForm.addEventListener('submit', (event) => {
@@ -526,7 +565,7 @@
 
         const title = mediaTitle(media);
         const year = mediaYear(media);
-        const score = formatRating(media.vote_average);
+        const score = formatRating(media.imdb_rating || media.vote_average);
         const backdrop = imageURL(media.backdrop_path, 'original');
 
         elements.heroTitle.textContent = title;
@@ -536,7 +575,7 @@
             media._sourceAddonName ||
             'Catalog title';
         elements.heroMeta.replaceChildren(
-            makeElement('span', 'match', score ? `${score} viewer score` : 'Featured'),
+            makeElement('span', 'match', score ? `${ratingSource(media)} ${score}` : 'Featured'),
             makeElement('span', '', year || 'Catalog pick'),
             makeElement('span', '', mediaType(media) === 'movie' ? 'Movie' : 'Series'),
             makeElement('span', 'rating-pill', provider)
@@ -628,7 +667,12 @@
         const copy = makeElement('span', 'card-copy');
         const cardTitle = makeElement('span', 'card-title', title);
         const meta = makeElement('span', 'card-meta');
-        const rating = makeElement('span', 'card-rating', formatRating(media.vote_average) || 'New');
+        const ratingValue = formatRating(media.imdb_rating || media.vote_average);
+        const rating = makeElement(
+            'span',
+            'card-rating',
+            ratingValue ? `${ratingSource(media)} ${ratingValue}` : 'New'
+        );
         meta.append(
             makeElement('span', '', mediaYear(media) || '—'),
             makeElement('span', '', type === 'movie' ? 'Movie' : 'Series'),
@@ -653,6 +697,30 @@
                 const details = await api(`/api/tmdb/${endpoint}/${encodeURIComponent(media.id)}`);
                 state.activeMedia = normalizeMedia({ ...media, ...details }, type);
                 state.activeDetails = details;
+            }
+
+            const imdbId = state.activeDetails?.external_ids?.imdb_id || state.activeDetails?.imdb_id || state.activeMedia?.imdb_id;
+            if (imdbId && !state.activeMedia.imdb_rating) {
+                try {
+                    const addonType = type === 'movie' ? 'movie' : 'series';
+                    const ratingData = await api(`/api/addons/meta/org.streamflix.cinemeta/${addonType}/${encodeURIComponent(imdbId)}`);
+                    const imdbRating = Number.parseFloat(ratingData?.meta?.imdbRating);
+                    if (Number.isFinite(imdbRating) && imdbRating > 0) state.activeMedia.imdb_rating = imdbRating;
+                } catch {
+                    // The catalog rating remains available when the metadata add-on is offline.
+                }
+            }
+
+            const tmdbId = state.activeMedia?._tmdbId || state.activeDetails?.id;
+            if (/^\d+$/.test(String(tmdbId || ''))) {
+                try {
+                    const localeRegion = String(navigator.language || '').match(/-([A-Z]{2})$/i)?.[1] || 'IN';
+                    state.activeDetails.watchProviders = await api(
+                        `/api/tmdb/watch-providers/${type}/${encodeURIComponent(tmdbId)}?country=${encodeURIComponent(localeRegion)}`
+                    );
+                } catch {
+                    state.activeDetails.watchProviders = null;
+                }
             }
 
             renderDetails(state.activeMedia, state.activeDetails);
@@ -768,7 +836,7 @@
         const title = mediaTitle(media);
         const type = mediaType(media);
         const year = mediaYear(media);
-        const score = formatRating(media.vote_average);
+        const score = formatRating(media.imdb_rating || media.vote_average);
         const backdropURL = imageURL(media.backdrop_path, 'original');
         const posterURL = imageURL(media.poster_path, 'w500');
 
@@ -798,7 +866,7 @@
         main.append(heading);
 
         const meta = makeElement('div', 'details-meta');
-        if (score) meta.append(makeElement('span', 'score', `★ ${score}`));
+        if (score) meta.append(makeElement('span', 'score', `${ratingSource(media)} ${score}`));
         if (year) meta.append(makeElement('span', '', year));
         if (type === 'movie' && details.runtime) {
             meta.append(makeElement('span', '', `${details.runtime} min`));
@@ -893,7 +961,91 @@
         }
 
         layout.append(poster, main);
-        elements.detailsContent.replaceChildren(backdrop, layout);
+        const extras = makeElement('div', 'details-extras');
+        const providerSection = createWatchProviderSection(details.watchProviders);
+        if (providerSection) extras.append(providerSection);
+        const castSection = createCastSection(details.credits?.cast);
+        if (castSection) extras.append(castSection);
+        const recommendationItems = normalizeCollection([
+            ...(details.recommendations?.results || []),
+            ...(details.similar?.results || [])
+        ], type).filter((item) => mediaKey(item) !== mediaKey(media)).slice(0, 14);
+        if (recommendationItems.length) {
+            const section = makeElement('section', 'detail-rail-section');
+            section.append(makeElement('h3', '', 'More like this'));
+            const rail = makeElement('div', 'media-rail compact-rail');
+            rail.append(...recommendationItems.map((item) => createMediaCard(item)));
+            section.append(rail);
+            extras.append(section);
+        }
+        elements.detailsContent.replaceChildren(backdrop, layout, extras);
+    }
+
+    function createWatchProviderSection(data) {
+        if (!data?.available || !data.providers) return null;
+        const groups = [
+            ['stream', 'Stream'], ['free', 'Free'], ['ads', 'With ads'], ['rent', 'Rent'], ['buy', 'Buy']
+        ].map(([key, label]) => [label, data.providers[key] || []]).filter(([, items]) => items.length);
+        if (!groups.length) return null;
+
+        const section = makeElement('section', 'watch-providers');
+        const heading = makeElement('div', 'detail-section-heading');
+        const headingCopy = makeElement('div');
+        headingCopy.append(makeElement('p', 'section-kicker', `Availability · ${data.country}`), makeElement('h3', '', 'Where to watch'));
+        const attribution = makeElement('a', 'provider-attribution', 'Powered by JustWatch');
+        attribution.href = data.link || 'https://www.justwatch.com/';
+        attribution.target = '_blank';
+        attribution.rel = 'noopener noreferrer';
+        heading.append(headingCopy, attribution);
+        section.append(heading);
+
+        groups.forEach(([label, items]) => {
+            const row = makeElement('div', 'provider-row');
+            row.append(makeElement('strong', '', label));
+            const list = makeElement('div', 'provider-list');
+            items.forEach((provider) => {
+                const providerLink = makeElement('a', 'provider-tile');
+                providerLink.href = data.link || 'https://www.justwatch.com/';
+                providerLink.target = '_blank';
+                providerLink.rel = 'noopener noreferrer';
+                providerLink.title = `See ${provider.name} availability`;
+                if (provider.logo_path) {
+                    const image = document.createElement('img');
+                    image.src = imageURL(provider.logo_path, 'original');
+                    image.alt = '';
+                    image.loading = 'lazy';
+                    providerLink.append(image);
+                }
+                providerLink.append(makeElement('span', '', provider.name));
+                list.append(providerLink);
+            });
+            row.append(list);
+            section.append(row);
+        });
+        return section;
+    }
+
+    function createCastSection(cast) {
+        const people = Array.isArray(cast) ? cast.filter((person) => person?.name).slice(0, 12) : [];
+        if (!people.length) return null;
+        const section = makeElement('section', 'cast-section');
+        section.append(makeElement('h3', '', 'Cast'));
+        const list = makeElement('div', 'cast-list');
+        people.forEach((person) => {
+            const card = makeElement('article', 'cast-card');
+            const avatar = makeElement('div', 'cast-avatar', String(person.name).slice(0, 1));
+            if (person.profile_path) {
+                const image = document.createElement('img');
+                image.src = imageURL(person.profile_path, 'w185');
+                image.alt = '';
+                image.loading = 'lazy';
+                avatar.replaceChildren(image);
+            }
+            card.append(avatar, makeElement('strong', '', person.name), makeElement('span', '', person.character || 'Cast'));
+            list.append(card);
+        });
+        section.append(list);
+        return section;
     }
 
     function createEpisodePicker(details) {
@@ -1877,6 +2029,60 @@
         if (items.length) renderRail(elements.recentRail, items);
     }
 
+    function renderHistory() {
+        const items = state.recentlyViewed.map((item) => normalizeMedia(item)).filter(Boolean);
+        elements.historyGrid?.replaceChildren(...items.map((item) => createMediaCard(item)));
+        if (elements.historyEmpty) elements.historyEmpty.hidden = items.length > 0;
+        if (elements.clearHistory) elements.clearHistory.hidden = items.length === 0;
+    }
+
+    function clearHistory() {
+        if (!state.recentlyViewed.length || !window.confirm('Clear recently viewed titles from this browser?')) return;
+        state.recentlyViewed = [];
+        localStorage.removeItem(STORAGE_KEYS.recentlyViewed);
+        renderRecentlyViewed();
+        renderHistory();
+        showToast('History cleared.');
+    }
+
+    function renderCalendar() {
+        const series = state.watchlist.map((item) => normalizeMedia(item)).filter((item) => mediaType(item) === 'tv');
+        if (elements.calendarEmpty) elements.calendarEmpty.hidden = series.length > 0;
+        if (!elements.calendarBoard) return;
+        if (!series.length) {
+            elements.calendarBoard.replaceChildren();
+            return;
+        }
+
+        const dated = new Map();
+        const undated = [];
+        series.forEach((item) => {
+            const rawDate = String(item.next_episode_to_air?.air_date || item.first_air_date || '');
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+                undated.push(item);
+                return;
+            }
+            const key = rawDate.slice(0, 7);
+            if (!dated.has(key)) dated.set(key, []);
+            dated.get(key).push(item);
+        });
+
+        const groups = [...dated.entries()].sort(([left], [right]) => right.localeCompare(left));
+        if (undated.length) groups.push(['unknown', undated]);
+        elements.calendarBoard.replaceChildren(...groups.map(([key, items]) => {
+            const section = makeElement('section', 'calendar-group');
+            const label = key === 'unknown'
+                ? 'Date not supplied'
+                : new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' })
+                    .format(new Date(`${key}-01T00:00:00Z`));
+            section.append(makeElement('h2', '', label));
+            const rail = makeElement('div', 'media-rail');
+            rail.append(...items.map((item) => createMediaCard(item)));
+            section.append(rail);
+            return section;
+        }));
+    }
+
     async function shareMedia(media) {
         const shareData = {
             title: `${mediaTitle(media)} · TShow`,
@@ -2057,6 +2263,8 @@
         state.activeView = view;
         if (view === 'list') renderWatchlist();
         if (view === 'addons') loadAddons({ quiet: true });
+        if (view === 'calendar') renderCalendar();
+        if (view === 'history') renderHistory();
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -2247,7 +2455,18 @@
         const count = state.addons.filter((addon) => addon.isCustom).length;
         elements.addonCount.textContent = pluralize(count, 'private add-on');
 
-        const cards = state.addons.map((addon) => {
+        const visibleAddons = state.addons.filter((addon) => {
+            const resources = new Set((addon.resources || []).map((resource) => String(resource).toLowerCase()));
+            const filterMatches = state.addonFilter === 'all' ||
+                (state.addonFilter === 'custom' && addon.isCustom) ||
+                (state.addonFilter === 'catalog' && (resources.has('catalog') || addon.catalogs?.length)) ||
+                (state.addonFilter === 'stream' && resources.has('stream')) ||
+                (state.addonFilter === 'subtitles' && resources.has('subtitles'));
+            const searchText = `${addon.name || ''} ${addon.description || ''} ${addon.id || ''}`.toLocaleLowerCase();
+            return filterMatches && (!state.addonSearch || searchText.includes(state.addonSearch));
+        });
+
+        const cards = visibleAddons.map((addon) => {
             const card = makeElement('article', 'addon-card');
             const capability = addonCapability(addon);
             const configurationRequired = addon.behaviorHints?.configurationRequired === true;
@@ -2259,6 +2478,14 @@
                 .join('')
                 .toUpperCase();
             const icon = makeElement('div', 'addon-icon', initials);
+            const logoURL = imageURL(addon.logo, 'original');
+            if (logoURL) {
+                const image = document.createElement('img');
+                image.src = logoURL;
+                image.alt = '';
+                image.loading = 'lazy';
+                icon.replaceChildren(image);
+            }
 
             const copy = makeElement('div', 'addon-copy');
             const topLine = makeElement('div', 'addon-topline');
@@ -2299,7 +2526,7 @@
             footer.append(makeElement(
                 'span',
                 '',
-                `${addon.isCustom ? 'Manual' : 'Built-in'} · ${addon.id} · v${addon.version || '1.0.0'}`
+                `${addon.isCustom ? 'Your add-on' : 'TShow verified'} · ${addon.id} · v${addon.version || '1.0.0'}`
             ));
 
             if (addon.isRemovable) {
@@ -2333,7 +2560,10 @@
             return card;
         });
 
-        elements.addonGrid.replaceChildren(...cards);
+        elements.addonGrid.replaceChildren(...(cards.length
+            ? cards
+            : [makeElement('p', 'addon-empty', 'No add-ons match this filter.')]
+        ));
     }
 
     function addonCapability(addon) {
@@ -2611,6 +2841,9 @@
             release_date: type === 'movie' && year ? `${year}-01-01` : null,
             first_air_date: type === 'tv' && year ? `${year}-01-01` : null,
             vote_average: Number.isFinite(rating) ? rating : 0,
+            imdb_rating: Number.isFinite(Number.parseFloat(meta.imdbRating))
+                ? Number.parseFloat(meta.imdbRating)
+                : null,
             original_language: meta.language || meta.original_language || null,
             _addonCatalog: true,
             _sourceAddonId: addon.id || meta._sourceAddonId || null,
@@ -2670,6 +2903,7 @@
             poster_path: media.poster_path || null,
             backdrop_path: media.backdrop_path || null,
             vote_average: Number(media.vote_average) || 0,
+            imdb_rating: Number(media.imdb_rating) || null,
             overview: String(media.overview || '').slice(0, 1_500),
             original_language: media.original_language || null,
             _addonCatalog: Boolean(media._addonCatalog),
@@ -2719,6 +2953,10 @@
     function formatRating(value) {
         const rating = Number(value);
         return Number.isFinite(rating) && rating > 0 ? rating.toFixed(1) : '';
+    }
+
+    function ratingSource(media) {
+        return Number(media?.imdb_rating) > 0 ? 'IMDb' : 'TMDB';
     }
 
     function imageURL(path, size) {
