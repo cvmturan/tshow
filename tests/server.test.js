@@ -288,7 +288,7 @@ test('browser stream classifier rejects archives and keeps direct, HLS, and exte
   assert.equal(mimeTypeHls.format, 'hls');
 });
 
-test('user-added sources are external-only and never receive proxy or transcode URLs', () => {
+test('user-added browser streams stay direct and never receive proxy or transcode URLs', () => {
   const classify = streamRouter.classifyStream;
   const options = { externalOnly: true };
   const direct = classify(
@@ -325,15 +325,20 @@ test('user-added sources are external-only and never receive proxy or transcode 
   );
 
   for (const source of [direct, withHeaders, torrent]) {
-    assert.equal(source.browserReady, false);
-    assert.equal(source.url, null);
     assert.equal(source.transcodeUrl, null);
     assert.equal(source.transcodeLowUrl, null);
   }
-  assert.equal(direct.playbackMode, 'external-player');
+  assert.equal(direct.browserReady, true);
+  assert.equal(direct.playbackMode, 'direct');
+  assert.equal(direct.url, 'https://media.example.test/video.mp4');
+  assert.equal(direct.directFromProvider, true);
   assert.equal(direct.externalPlayerUrl, 'https://media.example.test/video.mp4');
+  assert.equal(withHeaders.browserReady, false);
+  assert.equal(withHeaders.url, null);
   assert.equal(withHeaders.playbackMode, 'external-player');
   assert.equal(withHeaders.requiresHeaders, true);
+  assert.equal(torrent.browserReady, false);
+  assert.equal(torrent.url, null);
   assert.equal(torrent.playbackMode, 'external-app');
   assert.match(torrent.externalAppUrl, /^magnet:\?xt=urn%3Abtih%3A/i);
   assert.equal(unsafe, null);
@@ -479,16 +484,17 @@ test('a lawful local Stremio fixture serves catalogs, episode metadata, and orde
     const hlsSource = streams.data.streams.find((stream) => stream.name === 'Fixture HLS');
     const sourceApp = streams.data.streams.find((stream) => stream.name === 'Fixture source app');
     assert.equal(directSource.sourceAddon, manifest.id);
-    assert.equal(directSource.browserReady, false);
-    assert.equal(directSource.playbackMode, 'external-player');
-    assert.equal(directSource.url, null);
+    assert.equal(directSource.browserReady, true);
+    assert.equal(directSource.playbackMode, 'direct');
+    assert.equal(directSource.url, 'https://media.example.test/fixture.mp4');
+    assert.equal(directSource.directFromProvider, true);
     assert.equal(directSource.externalPlayerUrl, 'https://media.example.test/fixture.mp4');
-    assert.equal(hlsSource.browserReady, false);
-    assert.equal(hlsSource.playbackMode, 'external-player');
+    assert.equal(hlsSource.browserReady, true);
+    assert.equal(hlsSource.playbackMode, 'hls');
+    assert.equal(hlsSource.url, 'https://media.example.test/fixture.m3u8');
     assert.equal(sourceApp.playbackMode, 'external-app');
     assert.match(sourceApp.externalAppUrl, /^magnet:/);
     for (const source of streams.data.streams.filter((stream) => stream.sourceAddon === manifest.id)) {
-      assert.equal(source.url, null);
       assert.equal(source.transcodeUrl, null);
       assert.equal(source.transcodeLowUrl, null);
     }
@@ -496,7 +502,8 @@ test('a lawful local Stremio fixture serves catalogs, episode metadata, and orde
     const archiveIndex = streams.data.streams.findIndex((stream) =>
       /archive/i.test(stream.name)
     );
-    assert.equal(demoIndex, 0);
+    assert.equal(streams.data.streams[0].name, 'Fixture direct');
+    assert.ok(demoIndex > 0);
     assert.ok(archiveIndex > demoIndex);
     assert.equal(streams.data.streams[archiveIndex].browserReady, false);
 
@@ -561,6 +568,7 @@ test('legal center is served with terms, privacy, copyright, and provider notice
   assert.match(html, /id="privacy"/);
   assert.match(html, /id="copyright"/);
   assert.match(html, /id="notice"/);
-  assert.match(html, /does not proxy, download, cache, or transcode their video/i);
+  assert.match(html, /does not proxy, download, cache, or transcode video returned by user-added add-ons/i);
+  assert.match(html, /copyright@showt\.fun/i);
   assert.match(html, /This product uses the TMDB API when configured but is not endorsed or certified by TMDB/);
 });
