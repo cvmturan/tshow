@@ -43,6 +43,7 @@ test('static requests use the Cloudflare asset binding', async () => {
     createContext()
   );
   assert.equal(assetRequest.url, 'https://tshow.example/legal.html');
+  assert.match(response.headers.get('x-robots-tag'), /noindex/);
   assert.equal(await response.text(), 'legal');
 });
 
