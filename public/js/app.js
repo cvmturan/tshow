@@ -320,6 +320,14 @@
         });
         elements.videoPlayer.addEventListener('error', () => {
             if (!elements.videoPlayer.currentSrc || state.hlsPlayer) return;
+            const stream = state.streams[state.activeStreamIndex];
+            if (stream?.directFromProvider) {
+                updateExternalPlayerActions(stream);
+                showUnsupportedSource(
+                    'The browser could not play this provider link directly. TShow did not relay or convert it; try an external player or another source.'
+                );
+                return;
+            }
             showToast('This source could not be played by the browser. Try another source or video format.', 'error');
         });
 
@@ -1221,7 +1229,7 @@
     }
 
     function sourceFilterHelp(filter) {
-        if (filter === 'playable') return 'Direct MP4, WebM, or HLS sources confirmed for browser playback.';
+        if (filter === 'playable') return 'Direct MP4, WebM, or HLS sources. User-added video connects from its provider straight to your browser.';
         if (filter === 'try') return 'These smaller sources are forwarded unchanged. They play only when their original format and codec are supported by the device.';
         if (filter === 'external') return 'User-added sources open directly in external players, source apps, or provider pages. Their video never passes through TShow.';
         if (filter === 'app-only') return 'These are downloads, redirects, torrents, or unknown formats intended for another app.';
@@ -1300,8 +1308,9 @@
         state.activeAttemptIndex = null;
         updateExternalPlayerActions(stream);
         elements.playerSourceTitle.textContent = stream.title || stream.name || 'Web stream';
-        elements.playerSourceNote.textContent = stream.description ||
-            `Provided by ${stream.sourceAddonName || 'an installed add-on'}`;
+        elements.playerSourceNote.textContent = stream.directFromProvider
+            ? `Direct from ${stream.sourceAddonName || 'the provider'} to this browser — TShow does not proxy or transcode it.`
+            : stream.description || `Provided by ${stream.sourceAddonName || 'an installed add-on'}`;
 
         if (!stream.browserReady) {
             const canOpenExternally = isSafeWebURL(stream.externalUrl);
@@ -2750,13 +2759,22 @@
         const open = !document.body.classList.contains('sidebar-open');
         document.body.classList.toggle('sidebar-open', open);
         elements.menuButton.setAttribute('aria-expanded', String(open));
-        elements.sidebarScrim.hidden = !open;
+        elements.menuButton.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+        elements.siteSidebar.setAttribute('aria-hidden', String(!open));
+        elements.sidebarScrim.setAttribute('aria-hidden', String(!open));
+        if (open) {
+            window.requestAnimationFrame(() => {
+                elements.siteSidebar.querySelector('.nav-link.is-active, .nav-link')?.focus({ preventScroll: true });
+            });
+        }
     }
 
     function closeSidebar() {
         document.body.classList.remove('sidebar-open');
         elements.menuButton.setAttribute('aria-expanded', 'false');
-        elements.sidebarScrim.hidden = true;
+        elements.menuButton.setAttribute('aria-label', 'Open menu');
+        elements.siteSidebar.setAttribute('aria-hidden', 'true');
+        elements.sidebarScrim.setAttribute('aria-hidden', 'true');
     }
 
     function updateClock() {
