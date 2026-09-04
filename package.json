@@ -5,6 +5,7 @@
   "description": "TShow: a local-first movie and series discovery PWA with manual add-ons",
   "main": "server.js",
   "scripts": {
+    "build": "node scripts/build-cloudflare.js",
     "start": "node server.js",
     "dev": "node --watch server.js",
     "cf:build": "node scripts/build-cloudflare.js",
