@@ -73,6 +73,52 @@ router.get('/airing-today/tv', async (req, res) => {
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+router.get('/watch-providers/:type/:id', async (req, res) => {
+  const type = req.params.type === 'tv' ? 'tv' : req.params.type === 'movie' ? 'movie' : null;
+  const id = String(req.params.id || '');
+  const country = String(req.query.country || 'IN').toUpperCase();
+  if (!type || !/^\d{1,12}$/.test(id)) {
+    return res.status(400).json({ error: 'A valid movie or TV id is required' });
+  }
+  if (!/^[A-Z]{2}$/.test(country)) {
+    return res.status(400).json({ error: 'Country must be a two-letter code' });
+  }
+
+  try {
+    const data = await tmdb.getWatchProviders(id, type);
+    const region = data?.results?.[country] || {};
+    const normalize = (items) => Array.isArray(items)
+      ? items.slice(0, 30).map((provider) => ({
+          id: provider.provider_id,
+          name: provider.provider_name,
+          logo_path: provider.logo_path,
+          priority: provider.display_priority
+        }))
+      : [];
+    res.json({
+      available: true,
+      country,
+      link: typeof region.link === 'string' ? region.link : null,
+      providers: {
+        stream: normalize(region.flatrate),
+        free: normalize(region.free),
+        ads: normalize(region.ads),
+        rent: normalize(region.rent),
+        buy: normalize(region.buy)
+      },
+      attribution: 'Watch availability data powered by JustWatch via TMDB.'
+    });
+  } catch (error) {
+    res.json({
+      available: false,
+      country,
+      link: null,
+      providers: { stream: [], free: [], ads: [], rent: [], buy: [] },
+      attribution: 'Watch availability data powered by JustWatch via TMDB.'
+    });
+  }
+});
+
 router.get('/genres/:type', async (req, res) => {
   try {
     const { type } = req.params;
@@ -84,7 +130,7 @@ router.get('/genres/:type', async (req, res) => {
 router.get('/movie/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const appendToResponse = req.query.append_to_response || 'credits,videos,images,recommendations,similar,keywords';
+    const appendToResponse = req.query.append_to_response || 'credits,videos,images,recommendations,similar,keywords,external_ids';
     const data = await tmdb.getMovieDetails(id, appendToResponse).catch(() => sampleData.getMovieDetail(id));
     res.json(data);
   } catch (error) { res.status(500).json({ error: error.message }); }
@@ -93,7 +139,7 @@ router.get('/movie/:id', async (req, res) => {
 router.get('/tv/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const appendToResponse = req.query.append_to_response || 'credits,videos,images,recommendations,similar,keywords';
+    const appendToResponse = req.query.append_to_response || 'credits,videos,images,recommendations,similar,keywords,external_ids';
     const data = await tmdb.getTVDetails(id, appendToResponse).catch(() => sampleData.getTVDetail(id));
     res.json(data);
   } catch (error) { res.status(500).json({ error: error.message }); }
