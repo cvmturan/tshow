@@ -2,6 +2,7 @@ const DEFAULT_API_ORIGIN = 'https://tshow.onrender.com';
 
 const RESPONSE_SECURITY_HEADERS = {
   'Referrer-Policy': 'no-referrer',
+  'X-Robots-Tag': 'noindex, nofollow, noarchive, nosnippet, noimageindex',
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY'
 };
@@ -49,14 +50,24 @@ function cacheKey(request) {
   });
 }
 
-function withEdgeHeaders(response, cacheStatus) {
+function withSecurityHeaders(response) {
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(RESPONSE_SECURITY_HEADERS)) headers.set(name, value);
-  headers.set('X-TShow-Edge-Cache', cacheStatus);
 
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
+    headers
+  });
+}
+
+function withEdgeHeaders(response, cacheStatus) {
+  const secured = withSecurityHeaders(response);
+  const headers = new Headers(secured.headers);
+  headers.set('X-TShow-Edge-Cache', cacheStatus);
+  return new Response(secured.body, {
+    status: secured.status,
+    statusText: secured.statusText,
     headers
   });
 }
@@ -131,6 +142,6 @@ export default {
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
       return proxyAPI(request, env, ctx);
     }
-    return env.ASSETS.fetch(request);
+    return withSecurityHeaders(await env.ASSETS.fetch(request));
   }
 };
