@@ -127,7 +127,9 @@ const app = createApp();
 
 async function startServer(options = {}) {
   const port = Number(options.port ?? process.env.PORT ?? 3000);
-  const host = options.host || process.env.HOST || '127.0.0.1';
+  // Container hosts such as Render need the process to listen on every
+  // interface so their port scanner and proxy can reach it.
+  const host = options.host || process.env.HOST || '0.0.0.0';
 
   await addonManager.initialize();
 
