@@ -760,10 +760,17 @@ video {
 }
 
 .card-copy {
+    display: block;
+    width: 100%;
+    min-width: 0;
     padding: 12px 3px 0;
+    overflow: hidden;
 }
 
 .card-title {
+    display: block;
+    width: 100%;
+    min-width: 0;
     margin: 0;
     overflow: hidden;
     color: var(--text);
@@ -776,12 +783,27 @@ video {
 
 .card-meta {
     display: flex;
+    max-width: 100%;
+    min-width: 0;
     align-items: center;
     gap: 8px;
     margin-top: 4px;
     color: #777c87;
     font-size: 11px;
     font-weight: 620;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.card-meta > span {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.card-meta .card-rating {
+    flex-shrink: 0;
 }
 
 .card-rating {
@@ -2409,6 +2431,19 @@ code {
     .media-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 22px 10px;
+    }
+
+    .card-copy {
+        padding-top: 9px;
+    }
+
+    .card-title {
+        font-size: 13px;
+    }
+
+    .card-meta {
+        gap: 6px;
+        font-size: 10px;
     }
 
     .browse-toolbar {
