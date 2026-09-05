@@ -144,11 +144,34 @@ async function proxyAPI(request, env, ctx) {
   return response;
 }
 
+async function proxyTitlePage(request, env) {
+  const incomingURL = new URL(request.url);
+  const origin = apiOrigin(env.API_ORIGIN, incomingURL);
+  if (!origin) return new Response('Title pages are temporarily unavailable.', { status: 503 });
+  const upstreamURL = new URL(origin);
+  upstreamURL.pathname = incomingURL.pathname;
+  upstreamURL.search = incomingURL.search;
+  const headers = new Headers(request.headers);
+  for (const name of ['host', 'cf-connecting-ip', 'cf-ipcountry', 'cf-ray', 'cf-visitor', 'x-forwarded-for', 'x-forwarded-proto']) headers.delete(name);
+  try {
+    const response = await fetch(new Request(upstreamURL, { method: request.method, headers, redirect: 'follow' }));
+    return withSecurityHeaders(response, incomingURL);
+  } catch {
+    return new Response('Title pages are temporarily unavailable.', {
+      status: 502,
+      headers: { ...BASE_SECURITY_HEADERS, 'Content-Type': 'text/plain; charset=utf-8' }
+    });
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
       return proxyAPI(request, env, ctx);
+    }
+    if (/^\/(movie|series)\/\d{1,12}(?:\/[^/]*)?\/?$/.test(url.pathname)) {
+      return proxyTitlePage(request, env);
     }
     return withSecurityHeaders(await env.ASSETS.fetch(request), url);
   }

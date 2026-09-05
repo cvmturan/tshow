@@ -136,3 +136,20 @@ test('API paths cannot replace the configured upstream host', async (t) => {
   assert.equal(upstreamURL.origin, 'https://tshow.onrender.com');
   assert.equal(upstreamURL.pathname, '/api//attacker.example/path');
 });
+
+test('permanent title pages are rendered by the fixed origin', async (t) => {
+  const originalFetch = globalThis.fetch;
+  let upstreamURL;
+  globalThis.fetch = async (request) => {
+    upstreamURL = request.url;
+    return new Response('<h1>Movie</h1>', { headers: { 'Content-Type': 'text/html' } });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const response = await worker.fetch(
+    new Request('https://showt.fun/movie/278/the-shawshank-redemption?country=IN'),
+    { API_ORIGIN: 'https://tshow.onrender.com', ASSETS: { fetch() { throw new Error('assets should not run'); } } },
+    createContext()
+  );
+  assert.equal(upstreamURL, 'https://tshow.onrender.com/movie/278/the-shawshank-redemption?country=IN');
+  assert.match(await response.text(), /Movie/);
+});
