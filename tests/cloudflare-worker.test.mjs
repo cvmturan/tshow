@@ -35,7 +35,7 @@ test('only public metadata endpoints qualify for edge caching', () => {
   })), 0);
 });
 
-test('static requests use the Cloudflare asset binding', async () => {
+test('public static pages are indexable while private app views are not', async () => {
   let assetRequest;
   const response = await worker.fetch(
     new Request('https://tshow.example/legal.html'),
@@ -43,8 +43,15 @@ test('static requests use the Cloudflare asset binding', async () => {
     createContext()
   );
   assert.equal(assetRequest.url, 'https://tshow.example/legal.html');
-  assert.match(response.headers.get('x-robots-tag'), /noindex/);
+  assert.equal(response.headers.get('x-robots-tag'), null);
   assert.equal(await response.text(), 'legal');
+
+  const privateResponse = await worker.fetch(
+    new Request('https://tshow.example/?view=addons'),
+    { ASSETS: { fetch() { return new Response('app'); } } },
+    createContext()
+  );
+  assert.match(privateResponse.headers.get('x-robots-tag'), /noindex/);
 });
 
 test('API requests go to the fixed Render origin without forwarding Cloudflare identity headers', async (t) => {

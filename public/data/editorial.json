@@ -1,0 +1,94 @@
+{
+  "site": {
+    "name": "TShow",
+    "url": "https://showt.fun",
+    "updated": "2026-09-04",
+    "editorialPolicy": "TShow publishes original discovery guides based on public metadata. Availability and release dates can change, so viewers should confirm details with the official provider."
+  },
+  "items": [
+    {
+      "slug": "how-to-find-where-a-movie-is-streaming",
+      "type": "guide",
+      "label": "Viewing guide",
+      "title": "How to find where a movie is streaming",
+      "summary": "A quick, privacy-friendly way to compare legitimate viewing providers without opening a dozen tabs.",
+      "published": "2026-09-04",
+      "readTime": "4 min read",
+      "body": [
+        "Start with the title page in TShow and open Watch options. When TMDB provider data is available, TShow groups services by subscription, rent, buy and free-with-ads options for your selected region.",
+        "Provider availability changes by country and over time. Treat every listing as a discovery shortcut and confirm the final price, language and availability on the provider's official page before paying.",
+        "Trailers and provider links open from the viewer's device. User-installed add-ons remain private to that browser and should only be used with media the viewer is authorized to access."
+      ]
+    },
+    {
+      "slug": "build-a-weekend-watchlist",
+      "type": "collection",
+      "label": "TShow collection",
+      "title": "Build a better weekend watchlist",
+      "summary": "A simple three-part mix: one crowd favourite, one short series and one wildcard chosen outside your usual genres.",
+      "published": "2026-09-04",
+      "readTime": "3 min read",
+      "body": [
+        "A useful watchlist is short enough to finish. Begin with one popular film you already wanted to see, add a limited or short-form series, then choose one highly rated title from a genre you rarely browse.",
+        "Save those three titles to My list. TShow stores the list in the current browser, so there is no account to manage and no viewing profile shared with an advertising network.",
+        "If the first choice does not fit the mood, move to the wildcard instead of spending the whole evening scrolling."
+      ]
+    },
+    {
+      "slug": "new-release-calendar-explained",
+      "type": "release",
+      "label": "Release desk",
+      "title": "A calmer way to follow new releases",
+      "summary": "Use release dates as a planning tool, not a promise: schedules, regions and episode dates often move.",
+      "published": "2026-09-04",
+      "readTime": "3 min read",
+      "body": [
+        "TShow's catalog highlights latest films and series airing today from connected metadata providers. The Calendar view can also group saved series when their next date is available.",
+        "Release information is best understood as a signal. A theatrical date may differ from a streaming date, and an episode can arrive at different local times in different countries.",
+        "For an important premiere, verify the date with the studio, broadcaster or streaming service in your region."
+      ]
+    },
+    {
+      "slug": "what-ratings-can-and-cannot-tell-you",
+      "type": "guide",
+      "label": "Ratings guide",
+      "title": "What a movie rating can—and cannot—tell you",
+      "summary": "Ratings help narrow a large catalog, but the vote count, audience and your own taste matter just as much.",
+      "published": "2026-09-04",
+      "readTime": "5 min read",
+      "body": [
+        "A rating is a compressed opinion from a particular audience. Compare it with the number of votes: a stable score from many viewers usually means something different from an early score based on a small group.",
+        "Genre matters too. Horror, experimental cinema and children's titles can have devoted audiences while looking weaker in broad averages.",
+        "Use ratings to shortlist, then read the overview, check the cast and watch an official trailer. TShow labels the source of a score so viewers do not mistake a TMDB community rating for an IMDb rating."
+      ]
+    },
+    {
+      "slug": "privacy-first-movie-discovery",
+      "type": "news",
+      "label": "From TShow",
+      "title": "TShow expands privacy-first movie discovery",
+      "summary": "The new Explore area brings guides, collections and release notes together while keeping personal add-ons and lists in the browser.",
+      "published": "2026-09-04",
+      "readTime": "2 min read",
+      "body": [
+        "TShow now brings its original guides, curated collections and release explainers into one Explore area. The design deliberately uses a small set of tabs so the viewing interface stays easy to navigate.",
+        "Public editorial pages have permanent web addresses for sharing and search. Personal features remain separate: a viewer's list, history and manually installed add-ons stay in that browser.",
+        "TShow does not auto-publish unverified AI articles. Drafting tools may assist the editorial workflow, but a person must review sources, accuracy, rights and usefulness before anything appears publicly."
+      ]
+    },
+    {
+      "slug": "family-movie-night-without-endless-scrolling",
+      "type": "collection",
+      "label": "TShow collection",
+      "title": "Family movie night without endless scrolling",
+      "summary": "Choose the constraints first—runtime, age range and mood—then let everyone pick from a final three.",
+      "published": "2026-09-04",
+      "readTime": "3 min read",
+      "body": [
+        "Before browsing, agree on a maximum runtime and the youngest viewer's age range. Pick a mood such as funny, adventurous or gentle rather than asking everyone for a title immediately.",
+        "Search and save three suitable options. Check the official rating and parental guidance in your country because catalog genres and community scores are not age classifications.",
+        "Let each person remove one choice only if another remains. The last title becomes tonight's pick, and the others stay saved for next time."
+      ]
+    }
+  ]
+}

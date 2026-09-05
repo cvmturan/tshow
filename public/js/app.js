@@ -57,7 +57,9 @@
         dataSaver: false,
         installPrompt: null,
         addonFilter: 'all',
-        addonSearch: ''
+        addonSearch: '',
+        exploreItems: [],
+        exploreFilter: 'all'
     };
 
     const elements = {};
@@ -87,7 +89,7 @@
         ]);
 
         const requestedView = new URLSearchParams(window.location.search).get('view');
-        if (['home', 'list', 'calendar', 'history', 'addons', 'help'].includes(requestedView)) setView(requestedView);
+        if (['home', 'explore', 'list', 'calendar', 'history', 'addons', 'help'].includes(requestedView)) setView(requestedView);
     }
 
     function cacheElements() {
@@ -133,6 +135,8 @@
             'history-grid',
             'history-empty',
             'clear-history',
+            'explore-tabs',
+            'explore-grid',
             'search-title',
             'search-summary',
             'search-grid',
@@ -207,6 +211,13 @@
 
         document.querySelectorAll('[data-browse-rail]').forEach((button) => {
             button.addEventListener('click', () => showCollectionView(button.dataset.browseRail));
+        });
+
+        document.querySelectorAll('[data-explore-filter]').forEach((button) => {
+            button.addEventListener('click', () => {
+                state.exploreFilter = button.dataset.exploreFilter || 'all';
+                renderExplore();
+            });
         });
 
         elements.menuButton.addEventListener('click', toggleSidebar);
@@ -2261,11 +2272,72 @@
         });
 
         state.activeView = view;
+        updateIndexingForView(view);
         if (view === 'list') renderWatchlist();
+        if (view === 'explore') loadExplore();
         if (view === 'addons') loadAddons({ quiet: true });
         if (view === 'calendar') renderCalendar();
         if (view === 'history') renderHistory();
         window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function updateIndexingForView(view) {
+        const privateViews = new Set(['list', 'calendar', 'history', 'addons', 'help']);
+        const robots = document.querySelector('meta[name="robots"]');
+        if (robots) robots.content = privateViews.has(view)
+            ? 'noindex, nofollow, noarchive'
+            : 'index, follow, max-image-preview:large';
+    }
+
+    async function loadExplore() {
+        if (state.exploreItems.length) {
+            renderExplore();
+            return;
+        }
+        try {
+            const response = await fetch('/data/editorial.json', { headers: { Accept: 'application/json' } });
+            if (!response.ok) throw new Error('Editorial feed unavailable');
+            const data = await response.json();
+            state.exploreItems = Array.isArray(data.items) ? data.items : [];
+            renderExplore();
+        } catch {
+            elements.exploreGrid.replaceChildren();
+            const message = makeElement('div', 'empty-state');
+            message.append(makeElement('h2', '', 'Stories are taking a short break'), makeElement('p', '', 'Movie discovery and your private features still work normally.'));
+            elements.exploreGrid.append(message);
+        }
+    }
+
+    function renderExplore() {
+        document.querySelectorAll('[data-explore-filter]').forEach((button) => {
+            const active = button.dataset.exploreFilter === state.exploreFilter;
+            button.classList.toggle('is-active', active);
+            button.setAttribute('aria-selected', String(active));
+        });
+        const items = state.exploreFilter === 'all'
+            ? state.exploreItems
+            : state.exploreItems.filter((item) => item.type === state.exploreFilter);
+        const cards = items.map((item, index) => {
+            const card = makeElement('article', `explore-card${index === 0 && state.exploreFilter === 'all' ? ' explore-card-featured' : ''}`);
+            const label = makeElement('p', 'explore-card-label', item.label || item.type);
+            const title = makeElement('h2');
+            const link = makeElement('a', '', item.title || 'TShow story');
+            link.href = `/news/${encodeURIComponent(item.slug)}/`;
+            title.append(link);
+            const summary = makeElement('p', 'explore-card-summary', item.summary || '');
+            const meta = makeElement('div', 'explore-card-meta');
+            meta.append(makeElement('span', '', item.readTime || 'Quick read'), makeElement('span', '', formatEditorialDate(item.published)));
+            card.append(label, title, summary, meta);
+            return card;
+        });
+        elements.exploreGrid.replaceChildren(...cards);
+        if (!cards.length) elements.exploreGrid.append(makeElement('p', 'explore-loading', 'New stories are being reviewed.'));
+    }
+
+    function formatEditorialDate(value) {
+        const date = new Date(`${value || ''}T00:00:00Z`);
+        if (Number.isNaN(date.getTime())) return '';
+        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
     }
 
     function getAddonCatalogDescriptors() {

@@ -5,10 +5,11 @@
   "description": "TShow: a local-first movie and series discovery PWA with manual add-ons",
   "main": "server.js",
   "scripts": {
-    "build": "node scripts/build-cloudflare.js",
+    "build": "node scripts/build-editorial.js && node scripts/build-cloudflare.js",
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "cf:build": "node scripts/build-cloudflare.js",
+    "cf:build": "node scripts/build-editorial.js && node scripts/build-cloudflare.js",
+    "editorial:build": "node scripts/build-editorial.js",
     "cf:dev": "wrangler dev",
     "cf:deploy": "wrangler deploy",
     "cf:check": "wrangler deploy --dry-run",

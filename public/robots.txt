@@ -1,3 +1,9 @@
 User-agent: *
-Content-Signal: search=no, ai-input=no, ai-train=no, use=immediate
-Disallow: /
+Allow: /
+Disallow: /api/
+Disallow: /*?view=list
+Disallow: /*?view=history
+Disallow: /*?view=calendar
+Disallow: /*?view=addons
+Sitemap: https://showt.fun/sitemap.xml
+Sitemap: https://showt.fun/news-sitemap.xml

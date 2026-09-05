@@ -4,9 +4,11 @@
   Cross-Origin-Resource-Policy: cross-origin
   Permissions-Policy: camera=(), geolocation=(), microphone=()
   Referrer-Policy: no-referrer
-  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
+
+/api/*
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
 
 /assets/*
   Cache-Control: public, max-age=604800
