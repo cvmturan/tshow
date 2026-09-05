@@ -129,8 +129,10 @@ test('IMDb permanent pages use catalog metadata and direct legal viewing links',
     assert.match(html, /Inception/);
     assert.match(html, /8\.8[\s\S]*IMDb/);
     assert.match(html, /Legal provider/);
+    assert.match(html, /viewing links returned by WatchHub/i);
     assert.match(html, /https:\/\/provider\.example\.test\/watch/);
     assert.doesNotMatch(html, /Unknown Movie/);
+    assert.doesNotMatch(html, /Metadata and community rating from TMDB/);
   } finally {
     addonManager.getMeta = originalMeta;
     addonManager.getStreams = originalStreams;
