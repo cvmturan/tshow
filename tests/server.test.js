@@ -127,6 +127,7 @@ test('IMDb permanent pages use catalog metadata and direct legal viewing links',
     const html = await response.text();
     assert.equal(response.status, 200);
     assert.match(html, /Inception/);
+    assert.match(html, /8\.8[\s\S]*IMDb/);
     assert.match(html, /Legal provider/);
     assert.match(html, /https:\/\/provider\.example\.test\/watch/);
     assert.doesNotMatch(html, /Unknown Movie/);
