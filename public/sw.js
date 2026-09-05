@@ -1,12 +1,12 @@
 'use strict';
 
-const SHELL_CACHE = 'tshow-shell-v11';
+const SHELL_CACHE = 'tshow-shell-v12';
 const SHELL_FILES = [
   '/',
   '/index.html',
   '/legal.html',
-  '/css/main.css?v=20260906-4',
-  '/js/app.js?v=20260906-4',
+  '/css/main.css?v=20260906-5',
+  '/js/app.js?v=20260906-5',
   '/manifest.webmanifest',
   '/assets/tshow-logo.png',
   '/assets/tshow-icon-192.png',
