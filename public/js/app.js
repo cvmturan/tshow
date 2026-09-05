@@ -717,6 +717,9 @@
             }
 
             const imdbId = state.activeDetails?.external_ids?.imdb_id || state.activeDetails?.imdb_id || state.activeMedia?.imdb_id;
+            if (/^tt\d{5,12}$/i.test(String(imdbId || ''))) {
+                state.activeMedia.imdb_id = imdbId;
+            }
             if (state.activeMedia._addonCatalog && /^tt\d+$/.test(imdbId || state.activeMedia._stremioId || '')) {
                 try {
                     const externalId = imdbId || state.activeMedia._stremioId;
@@ -2103,10 +2106,10 @@
 
     function publicTitleURL(media) {
         const imdbId = media?.imdb_id || media?._stremioId;
-        const stableAddonId = media?._addonCatalog && /^tt\d{5,12}$/i.test(String(imdbId || ''))
+        const stableImdbId = /^tt\d{5,12}$/i.test(String(imdbId || ''))
             ? imdbId
             : null;
-        const id = String(stableAddonId || media?._tmdbId || (/^tt\d{5,12}$/i.test(String(imdbId || '')) ? imdbId : media?.id) || '');
+        const id = String(stableImdbId || media?._tmdbId || media?.id || '');
         if (!/^(?:\d{1,12}|tt\d{5,12})$/i.test(id)) return null;
         const kind = mediaType(media) === 'tv' ? 'series' : 'movie';
         const slug = mediaTitle(media).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
