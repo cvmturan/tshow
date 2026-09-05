@@ -105,6 +105,44 @@ test('permanent movie pages render safe metadata and provider attribution', asyn
   assert.match(html, /rel="canonical" href="https:\/\/showt\.fun\/movie\/278\/the-shawshank-redemption"/);
 });
 
+test('IMDb permanent pages use catalog metadata and direct legal viewing links', async () => {
+  const addonManager = require('../src/core/addonManager');
+  const originalMeta = addonManager.getMeta;
+  const originalStreams = addonManager.getStreams;
+  addonManager.getMeta = async () => ({
+    meta: {
+      id: 'tt1375666',
+      name: 'Inception',
+      description: 'A dream-heist thriller.',
+      poster: 'https://images.example.test/inception.jpg',
+      imdbRating: '8.8',
+      genres: ['Science Fiction']
+    }
+  });
+  addonManager.getStreams = async () => ({
+    streams: [{ name: 'Legal provider', title: 'Open current offer', externalUrl: 'https://provider.example.test/watch' }]
+  });
+  try {
+    const response = await fetch(`${baseURL}/movie/tt1375666/inception?country=IN`);
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /Inception/);
+    assert.match(html, /Legal provider/);
+    assert.match(html, /https:\/\/provider\.example\.test\/watch/);
+    assert.doesNotMatch(html, /Unknown Movie/);
+  } finally {
+    addonManager.getMeta = originalMeta;
+    addonManager.getStreams = originalStreams;
+  }
+});
+
+test('unknown numeric permanent pages return not found instead of fake metadata', async () => {
+  const response = await fetch(`${baseURL}/movie/999999999999/missing`);
+  const html = await response.text();
+  assert.equal(response.status, 404);
+  assert.doesNotMatch(html, /Unknown Movie/);
+});
+
 test('IMDb title matching validates input and resolves the requested media type', async () => {
   const tmdb = require('../src/core/tmdb');
   const original = tmdb.request;

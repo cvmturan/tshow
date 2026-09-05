@@ -170,7 +170,7 @@ export default {
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
       return proxyAPI(request, env, ctx);
     }
-    if (/^\/(movie|series)\/\d{1,12}(?:\/[^/]*)?\/?$/.test(url.pathname)) {
+    if (/^\/(movie|series)\/(?:\d{1,12}|tt\d{5,12})(?:\/[^/]*)?\/?$/i.test(url.pathname)) {
       return proxyTitlePage(request, env);
     }
     return withSecurityHeaders(await env.ASSETS.fetch(request), url);

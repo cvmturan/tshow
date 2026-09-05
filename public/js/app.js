@@ -2102,8 +2102,9 @@
     }
 
     function publicTitleURL(media) {
-        const id = String(media?._tmdbId || media?.id || '');
-        if ((media?._addonCatalog && !media?._tmdbId) || !/^\d{1,12}$/.test(id)) return null;
+        const imdbId = media?.imdb_id || media?._stremioId;
+        const id = String(media?._tmdbId || (/^tt\d{5,12}$/i.test(String(imdbId || '')) ? imdbId : media?.id) || '');
+        if (!/^(?:\d{1,12}|tt\d{5,12})$/i.test(id)) return null;
         const kind = mediaType(media) === 'tv' ? 'series' : 'movie';
         const slug = mediaTitle(media).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
             .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'title';

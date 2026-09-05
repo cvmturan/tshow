@@ -2,6 +2,7 @@
 
 const tmdb = require('../core/tmdb');
 const sampleData = require('../core/sampleData');
+const addonManager = require('../core/addonManager');
 
 const SITE_URL = 'https://showt.fun';
 const COUNTRIES = {
@@ -39,15 +40,79 @@ function providerGroups(region = {}) {
   })).filter((group) => group.items.length);
 }
 
-function renderProviders(groups, link, country) {
-  if (!groups.length) return `<section class="title-section"><div class="title-section-heading"><p class="section-kicker">Where to watch · ${country}</p><h2>No provider listing found</h2></div><p class="title-muted">Availability changes frequently. Try another country or check again later.</p><p class="provider-credit-line">Availability data powered by JustWatch via TMDB.</p></section>`;
-  const destination = /^https:\/\//.test(link || '') ? link : 'https://www.justwatch.com/';
-  return `<section class="title-section"><div class="title-section-heading"><p class="section-kicker">Where to watch · ${country}</p><h2>Available services</h2><p>Only services currently returned for this title and country are shown.</p></div>${groups.map((group) => `<div class="title-provider-group"><h3>${group.label}</h3><div class="title-provider-list">${group.items.map((provider) => `<a class="title-provider" href="${escapeHTML(destination)}" target="_blank" rel="noopener noreferrer"><img src="${imageURL(provider.logo_path, 'w92')}" alt=""><span><strong>${escapeHTML(provider.provider_name)}</strong><small>${group.priceLabel}</small></span></a>`).join('')}</div></div>`).join('')}<p class="provider-credit-line">Availability data powered by <a href="${escapeHTML(destination)}" target="_blank" rel="noopener noreferrer">JustWatch</a> via TMDB. Exact prices are shown by the provider because public availability data does not include them.</p></section>`;
+function safeExternalURL(value) {
+  try {
+    const url = new URL(String(value || ''));
+    return url.protocol === 'https:' ? url.href : null;
+  } catch {
+    return null;
+  }
 }
 
-function renderTitlePage(details, providers, type, country) {
+function runtimeMinutes(value) {
+  if (Number.isFinite(Number(value)) && Number(value) > 0) return Math.round(Number(value));
+  const text = String(value || '').toLowerCase();
+  const hours = Number.parseInt(text.match(/(\d+)\s*h/)?.[1], 10) || 0;
+  const minutes = Number.parseInt(text.match(/(\d+)\s*m/)?.[1], 10) || 0;
+  return hours || minutes ? (hours * 60) + minutes : 0;
+}
+
+function normalizeCinemeta(meta, identifier, type) {
+  const title = meta?.name || meta?.title;
+  if (!title) return null;
+  const genres = Array.isArray(meta.genres) ? meta.genres : [];
+  const cast = Array.isArray(meta.cast) ? meta.cast : [];
+  return {
+    id: identifier,
+    title: type === 'movie' ? title : undefined,
+    name: type === 'tv' ? title : undefined,
+    overview: meta.description || '',
+    poster_path: meta.poster || null,
+    backdrop_path: meta.background || meta.poster || null,
+    release_date: type === 'movie' ? String(meta.releaseInfo || '') : '',
+    first_air_date: type === 'tv' ? String(meta.releaseInfo || '') : '',
+    runtime: runtimeMinutes(meta.runtime),
+    episode_run_time: [runtimeMinutes(meta.runtime)].filter(Boolean),
+    vote_average: Number.parseFloat(meta.imdbRating) || 0,
+    vote_count: 0,
+    imdb_id: identifier,
+    external_ids: { imdb_id: identifier },
+    genres: genres.map((name) => ({ name: String(name) })),
+    credits: { cast: cast.slice(0, 10).map((name) => ({ name: String(name), character: '' })) },
+    videos: { results: [] },
+    recommendations: { results: [] },
+    similar: { results: [] },
+    number_of_seasons: 0,
+    number_of_episodes: Array.isArray(meta.videos) ? meta.videos.length : 0
+  };
+}
+
+function normalizeWatchHub(streams = []) {
+  const seen = new Set();
+  return streams.map((stream) => {
+    const url = safeExternalURL(stream?.externalUrl || stream?.url);
+    const name = String(stream?.name || stream?.title || 'View offer').trim().slice(0, 100);
+    if (!url || seen.has(url)) return null;
+    seen.add(url);
+    return { name, url, description: String(stream?.title || '').trim().slice(0, 160) };
+  }).filter(Boolean).slice(0, 24);
+}
+
+function justWatchSearch(title, countryCode) {
+  const locales = { IN: 'in', CA: 'ca', US: 'us', GB: 'uk', AU: 'au', AE: 'ae', DE: 'de', FR: 'fr' };
+  return `https://www.justwatch.com/${locales[countryCode] || 'in'}/search?q=${encodeURIComponent(title)}`;
+}
+
+function renderProviders(groups, link, country, fallbackOffers = [], fallbackURL = 'https://www.justwatch.com/') {
+  if (!groups.length && fallbackOffers.length) return `<section class="title-section"><div class="title-section-heading"><p class="section-kicker">Where to watch · ${country}</p><h2>Available viewing links</h2><p>Current legal availability links returned by the built-in WatchHub catalog.</p></div><div class="title-provider-list">${fallbackOffers.map((offer) => `<a class="title-provider" href="${escapeHTML(offer.url)}" target="_blank" rel="noopener noreferrer"><span><strong>${escapeHTML(offer.name)}</strong><small>${escapeHTML(offer.description || 'Open provider')}</small></span></a>`).join('')}</div><p class="provider-credit-line">Availability can change. Confirm the final price and region on the provider page.</p></section>`;
+  if (!groups.length) return `<section class="title-section"><div class="title-section-heading"><p class="section-kicker">Where to watch · ${country}</p><h2>No provider listing found</h2></div><p class="title-muted">No service was returned for this title and country. Availability changes frequently.</p><a class="button button-secondary" href="${escapeHTML(safeExternalURL(link) || fallbackURL)}" target="_blank" rel="noopener noreferrer">Search current availability ↗</a><p class="provider-credit-line">Availability search powered by JustWatch.</p></section>`;
+  const destination = /^https:\/\//.test(link || '') ? link : 'https://www.justwatch.com/';
+  return `<section class="title-section"><div class="title-section-heading"><p class="section-kicker">Where to watch · ${country}</p><h2>Available services</h2><p>Only services currently returned for this title and country are shown.</p></div>${groups.map((group) => `<div class="title-provider-group"><h3>${group.label}</h3><div class="title-provider-list">${group.items.map((provider) => { const providerDestination = safeExternalURL(provider.provider_url) || destination; return `<a class="title-provider" href="${escapeHTML(providerDestination)}" target="_blank" rel="noopener noreferrer">${provider.logo_path ? `<img src="${imageURL(provider.logo_path, 'w92')}" alt="">` : ''}<span><strong>${escapeHTML(provider.provider_name)}</strong><small>${escapeHTML(provider.provider_description || group.priceLabel)}</small></span></a>`; }).join('')}</div></div>`).join('')}<p class="provider-credit-line">Availability data powered by <a href="${escapeHTML(destination)}" target="_blank" rel="noopener noreferrer">JustWatch</a> via TMDB. Exact prices are shown by the provider because public availability data does not include them.</p></section>`;
+}
+
+function renderTitlePage(details, providers, type, country, fallbackOffers = []) {
   const title = details.title || details.name || 'Untitled';
-  const id = Number(details.id);
+  const id = String(details.id);
   const slug = slugify(title);
   const kind = type === 'tv' ? 'series' : 'movie';
   const canonical = `${SITE_URL}/${kind}/${id}/${slug}`;
@@ -65,8 +130,22 @@ function renderTitlePage(details, providers, type, country) {
   const genres = Array.isArray(details.genres) ? details.genres.map((genre) => genre.name).filter(Boolean) : [];
   const region = providers?.results?.[country] || {};
   const groups = providerGroups(region);
-  const poster = imageURL(details.poster_path, 'w500');
-  const backdrop = imageURL(details.backdrop_path || details.poster_path, 'original');
+  if (!groups.length && fallbackOffers.length) {
+    groups.push({
+      label: 'Viewing links',
+      priceLabel: 'Open provider',
+      items: fallbackOffers.map((offer) => ({
+        provider_name: offer.name,
+        provider_url: offer.url,
+        provider_description: offer.description,
+        logo_path: null
+      }))
+    });
+  }
+  const poster = safeExternalURL(details.poster_path) || imageURL(details.poster_path, 'w500');
+  const backdrop = safeExternalURL(details.backdrop_path) || imageURL(details.backdrop_path || details.poster_path, 'original');
+  const availabilitySearch = justWatchSearch(title, country);
+  if (!region.link) region.link = availabilitySearch;
   const structuredData = {
     '@context': 'https://schema.org', '@type': type === 'tv' ? 'TVSeries' : 'Movie',
     name: title, description: overview, image: poster, url: canonical,
@@ -82,16 +161,34 @@ async function titlePage(req, res) {
   const type = req.params.type === 'series' ? 'tv' : 'movie';
   const id = String(req.params.id || '');
   const country = Object.hasOwn(COUNTRIES, String(req.query.country || '').toUpperCase()) ? String(req.query.country).toUpperCase() : 'IN';
-  if (!/^\d{1,12}$/.test(id)) return res.status(404).send('Title not found');
+  if (!/^(?:\d{1,12}|tt\d{5,12})$/i.test(id)) return res.status(404).send('Title not found');
   try {
-    const append = 'credits,videos,recommendations,similar,external_ids';
-    const details = type === 'tv'
-      ? await tmdb.getTVDetails(id, append).catch(() => sampleData.getTVDetail(id))
-      : await tmdb.getMovieDetails(id, append).catch(() => sampleData.getMovieDetail(id));
+    let details;
+    let providers = { results: {} };
+    let fallbackOffers = [];
+    if (/^tt\d{5,12}$/i.test(id)) {
+      const addonType = type === 'tv' ? 'series' : 'movie';
+      const metaResult = await addonManager.getMeta('org.streamflix.cinemeta', addonType, id);
+      details = normalizeCinemeta(metaResult?.meta, id, type);
+      const streamResult = await addonManager.getStreams('org.stremio.watchhub', addonType, id)
+        .catch(() => ({ streams: [] }));
+      fallbackOffers = normalizeWatchHub(streamResult?.streams);
+    } else {
+      const append = 'credits,videos,recommendations,similar,external_ids';
+      try {
+        details = type === 'tv'
+          ? await tmdb.getTVDetails(id, append)
+          : await tmdb.getMovieDetails(id, append);
+        providers = await tmdb.getWatchProviders(id, type).catch(() => ({ results: {} }));
+      } catch {
+        const fallback = type === 'tv' ? sampleData.getTVDetail(id) : sampleData.getMovieDetail(id);
+        const fallbackTitle = fallback?.title || fallback?.name || '';
+        details = /^Unknown (?:Movie|Series)$/.test(fallbackTitle) ? null : fallback;
+      }
+    }
     if (!details?.id) return res.status(404).send('Title not found');
-    const providers = await tmdb.getWatchProviders(id, type).catch(() => ({ results: {} }));
     res.set('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');
-    return res.type('html').send(renderTitlePage(details, providers, type, country));
+    return res.type('html').send(renderTitlePage(details, providers, type, country, fallbackOffers));
   } catch {
     return res.status(503).type('html').send('<h1>Title temporarily unavailable</h1>');
   }
