@@ -60,7 +60,17 @@
         addonSearch: '',
         region: loadStoredRegion(),
         exploreItems: [],
-        exploreFilter: 'all'
+        exploreFilter: 'all',
+        tmdbConfigured: false,
+        browseType: null,
+        browseItems: [],
+        browseNextPage: 3,
+        browseNextSkip: 300,
+        browseLoading: false,
+        browseExhausted: false,
+        browseEmptyPages: 0,
+        browseGeneration: 0,
+        browseObserver: null
     };
 
     const elements = {};
@@ -146,6 +156,12 @@
             'search-summary',
             'search-grid',
             'search-empty',
+            'browse-toolbar',
+            'browse-sort',
+            'browse-loader',
+            'browse-loader-title',
+            'browse-loader-note',
+            'browse-load-more',
             'addon-count',
             'addon-form',
             'manifest-url',
@@ -167,6 +183,9 @@
             'player-dialog',
             'player-close',
             'player-title',
+            'player-pip',
+            'player-fullscreen',
+            'video-stage',
             'video-player',
             'trailer-frame',
             'video-loading',
@@ -278,6 +297,15 @@
             if (state.activeView === 'search') setView('home');
         });
 
+        elements.browseSort.addEventListener('change', renderBrowseItems);
+        elements.browseLoadMore.addEventListener('click', () => loadMoreBrowse());
+        if ('IntersectionObserver' in window) {
+            state.browseObserver = new IntersectionObserver((entries) => {
+                if (entries.some((entry) => entry.isIntersecting)) loadMoreBrowse();
+            }, { rootMargin: '900px 0px' });
+            state.browseObserver.observe(elements.browseLoader);
+        }
+
         elements.regionSelect.addEventListener('change', () => {
             state.region = elements.regionSelect.value;
             localStorage.setItem(STORAGE_KEYS.region, state.region);
@@ -320,6 +348,11 @@
 
         elements.detailsClose.addEventListener('click', () => elements.detailsDialog.close());
         elements.playerClose.addEventListener('click', () => elements.playerDialog.close());
+        elements.playerFullscreen.addEventListener('click', togglePlayerFullscreen);
+        elements.playerPip.addEventListener('click', togglePlayerPictureInPicture);
+        document.addEventListener('fullscreenchange', updatePlayerWindowActions);
+        elements.videoPlayer.addEventListener('enterpictureinpicture', updatePlayerWindowActions);
+        elements.videoPlayer.addEventListener('leavepictureinpicture', updatePlayerWindowActions);
 
         [elements.detailsDialog, elements.playerDialog].forEach((dialog) => {
             dialog.addEventListener('click', (event) => {
@@ -389,12 +422,16 @@
 
         window.addEventListener('scroll', () => {
             elements.siteHeader.classList.toggle('is-scrolled', window.scrollY > 18);
+            if (state.browseType && window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 1200) {
+                loadMoreBrowse();
+            }
         }, { passive: true });
     }
 
     async function loadHome() {
         try {
             const tmdbHealth = await api('/api/tmdb/health').catch(() => ({ tmdbKey: false }));
+            state.tmdbConfigured = Boolean(tmdbHealth.tmdbKey);
             let catalogLabel = 'Live public metadata';
 
             if (tmdbHealth.tmdbKey) {
@@ -1365,7 +1402,7 @@
 
         const groups = [
             ['playable', 'Plays in this browser'],
-            ['try', 'Proxied browser try'],
+            ['try', 'Direct browser test'],
             ['external', 'External apps and provider links'],
             ['app-only', 'App-only or download sources'],
             ['demo', 'Player test — not the selected title']
@@ -1413,7 +1450,7 @@
         elements.streamSelect.disabled = state.visibleStreamIndexes.length === 0;
 
         elements.sourceSummary.textContent =
-            `${counts.all} entries: ${counts.playable} play here, ${counts.try} proxied browser tries, ` +
+            `${counts.all} entries: ${counts.playable} play here, ${counts.try} direct browser tests, ` +
             `${counts.external} external sources, ${counts['app-only']} app-only, ${counts.demo} player test.`;
         elements.sourceCompatibilityHelp.textContent = sourceFilterHelp(state.sourceFilter);
     }
@@ -1798,6 +1835,48 @@
         elements.dataSaverButton.classList.toggle('active', state.dataSaver);
     }
 
+    async function togglePlayerFullscreen() {
+        try {
+            if (document.fullscreenElement) {
+                await document.exitFullscreen();
+            } else if (elements.videoStage.requestFullscreen) {
+                await elements.videoStage.requestFullscreen();
+            } else if (elements.videoPlayer.webkitEnterFullscreen && !elements.videoPlayer.hidden) {
+                elements.videoPlayer.webkitEnterFullscreen();
+            } else {
+                throw new Error('Fullscreen is not available on this device.');
+            }
+        } catch (error) {
+            showToast(error.message || 'Fullscreen could not be opened.', 'warning');
+        }
+        updatePlayerWindowActions();
+    }
+
+    async function togglePlayerPictureInPicture() {
+        if (elements.videoPlayer.hidden || !document.pictureInPictureEnabled || !elements.videoPlayer.requestPictureInPicture) {
+            showToast('Picture in Picture is unavailable for this source or browser.', 'warning');
+            return;
+        }
+        try {
+            if (document.pictureInPictureElement) await document.exitPictureInPicture();
+            else await elements.videoPlayer.requestPictureInPicture();
+        } catch {
+            showToast('Start the video before using Picture in Picture.', 'warning');
+        }
+        updatePlayerWindowActions();
+    }
+
+    function updatePlayerWindowActions() {
+        const fullscreen = Boolean(document.fullscreenElement);
+        const pip = Boolean(document.pictureInPictureElement);
+        elements.playerFullscreen.setAttribute('aria-label', fullscreen ? 'Exit full screen' : 'Full screen');
+        elements.playerFullscreen.title = fullscreen ? 'Exit full screen' : 'Full screen';
+        elements.playerFullscreen.classList.toggle('is-active', fullscreen);
+        elements.playerPip.setAttribute('aria-label', pip ? 'Exit Picture in Picture' : 'Picture in Picture');
+        elements.playerPip.title = pip ? 'Exit Picture in Picture' : 'Picture in Picture';
+        elements.playerPip.classList.toggle('is-active', pip);
+    }
+
     function playHlsStream(url) {
         state.activeHlsURL = url;
         elements.videoLoading.hidden = false;
@@ -2125,6 +2204,7 @@
             return;
         }
 
+        leaveBrowseMode();
         setView('search');
         elements.searchTitle.textContent = `Results for “${query}”`;
         elements.searchSummary.textContent = 'Searching movies and series…';
@@ -2179,12 +2259,110 @@
         const items = dedupeSearchResults(
             allLoadedCatalogItems().filter((item) => mediaType(item) === (isMovie ? 'movie' : 'tv'))
         );
+        state.browseGeneration += 1;
+        state.browseType = type;
+        state.browseItems = items;
+        state.browseNextPage = 3;
+        state.browseNextSkip = 300;
+        state.browseLoading = false;
+        state.browseExhausted = false;
+        state.browseEmptyPages = 0;
         setView('search');
         elements.searchTitle.textContent = isMovie ? 'Browse movies' : 'Browse series';
-        elements.searchSummary.textContent = pluralize(items.length, isMovie ? 'movie' : 'series');
+        elements.browseToolbar.hidden = false;
+        elements.browseLoader.hidden = false;
+        renderBrowseItems();
+        history.replaceState(null, '', isMovie ? '/movies/' : '/series/');
+    }
+
+    function leaveBrowseMode() {
+        state.browseGeneration += 1;
+        state.browseType = null;
+        state.browseItems = [];
+        state.browseLoading = false;
+        elements.browseToolbar.hidden = true;
+        elements.browseLoader.hidden = true;
+        elements.searchGrid.classList.remove('browse-grid');
+    }
+
+    function sortedBrowseItems() {
+        const items = [...state.browseItems];
+        const sort = elements.browseSort.value;
+        if (sort === 'rating') return sortByRating(items);
+        if (sort === 'latest') return sortByLatest(items);
+        if (sort === 'title') return items.sort((left, right) => mediaTitle(left).localeCompare(mediaTitle(right)));
+        return items.sort((left, right) => Number(right.popularity || 0) - Number(left.popularity || 0));
+    }
+
+    function renderBrowseItems() {
+        if (!state.browseType) return;
+        const items = sortedBrowseItems();
+        const noun = state.browseType === 'movie' ? 'movies' : 'series';
+        elements.searchGrid.classList.add('browse-grid');
         elements.searchGrid.replaceChildren(...items.map((item) => createMediaCard(item)));
         elements.searchEmpty.hidden = items.length > 0;
-        history.replaceState(null, '', isMovie ? '/movies/' : '/series/');
+        elements.searchSummary.textContent = state.browseExhausted
+            ? `${items.length} ${noun} loaded · end of the current catalog`
+            : `${items.length} ${noun} loaded · more appear as you scroll`;
+        updateBrowseLoader();
+    }
+
+    function updateBrowseLoader(errorMessage = '') {
+        if (!state.browseType) return;
+        elements.browseLoader.hidden = false;
+        elements.browseLoader.classList.toggle('is-loading', state.browseLoading);
+        elements.browseLoader.classList.toggle('is-complete', state.browseExhausted);
+        elements.browseLoaderTitle.textContent = errorMessage
+            ? 'More titles could not be loaded'
+            : state.browseExhausted
+                ? 'You’re all caught up'
+                : state.browseLoading ? 'Loading more titles' : 'Keep scrolling';
+        elements.browseLoaderNote.textContent = errorMessage || (state.browseExhausted
+            ? 'This is the end of the currently connected public catalog.'
+            : 'More results appear automatically as you scroll.');
+        elements.browseLoadMore.hidden = state.browseLoading || state.browseExhausted;
+        elements.browseLoadMore.disabled = state.browseLoading;
+    }
+
+    async function loadMoreBrowse() {
+        if (!state.browseType || state.activeView !== 'search' || state.browseLoading || state.browseExhausted) return;
+        const generation = state.browseGeneration;
+        const type = state.browseType;
+        let loadError = '';
+        state.browseLoading = true;
+        updateBrowseLoader();
+        try {
+            let incoming;
+            if (state.tmdbConfigured) {
+                const endpoint = type === 'movie' ? 'movies' : 'tv';
+                const data = await api(`/api/tmdb/discover/${endpoint}?page=${state.browseNextPage}`);
+                state.browseNextPage += 1;
+                incoming = normalizeCollection(data.results, type);
+            } else {
+                const addonType = type === 'movie' ? 'movie' : 'series';
+                const data = await api(`/api/addons/catalog/org.cvmturan.discovery/${addonType}/top?skip=${state.browseNextSkip}`);
+                state.browseNextSkip += 100;
+                incoming = normalizeLiveCatalog(data, {
+                    addon: { id: 'org.cvmturan.discovery', name: 'TShow Discovery' },
+                    catalog: { id: 'top', name: type === 'movie' ? 'Popular movies' : 'Popular series' },
+                    type: addonType
+                });
+            }
+            if (generation !== state.browseGeneration || type !== state.browseType) return;
+            const previousCount = state.browseItems.length;
+            state.browseItems = dedupeSearchResults([...state.browseItems, ...incoming]);
+            const added = state.browseItems.length - previousCount;
+            state.browseEmptyPages = added ? 0 : state.browseEmptyPages + 1;
+            state.browseExhausted = incoming.length === 0 || state.browseEmptyPages >= 2 || state.browseItems.length >= 1200;
+            renderBrowseItems();
+        } catch (error) {
+            loadError = error.message || 'Try again in a moment.';
+        } finally {
+            if (generation === state.browseGeneration) {
+                state.browseLoading = false;
+                updateBrowseLoader(loadError);
+            }
+        }
     }
 
     function showCollectionView(collectionName) {
@@ -2199,6 +2377,7 @@
         };
         const [title, items] = collections[collectionName] || ['Browse', []];
         const results = dedupeSearchResults(items);
+        leaveBrowseMode();
         setView('search');
         elements.searchTitle.textContent = title;
         elements.searchSummary.textContent = pluralize(results.length, 'title');
@@ -2279,6 +2458,7 @@
         });
 
         state.activeView = view;
+        if (view !== 'search') leaveBrowseMode();
         if (view !== 'search') history.replaceState(null, '', view === 'home' ? '/' : `/?view=${encodeURIComponent(view)}`);
         updateIndexingForView(view);
         if (view === 'list') renderWatchlist();

@@ -21,9 +21,9 @@
     <link rel="icon" href="/assets/tshow-icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="/assets/tshow-icon-192.png">
     <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="stylesheet" href="/css/main.css?v=20260906-3">
+    <link rel="stylesheet" href="/css/main.css?v=20260906-4">
     <script src="/vendor/hls/hls.min.js" defer></script>
-    <script src="/js/app.js?v=20260906-3" defer></script>
+    <script src="/js/app.js?v=20260906-4" defer></script>
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"TShow","url":"https://showt.fun/","logo":"https://showt.fun/assets/tshow-icon-512.png","email":"support@showt.fun"}</script>
 </head>
 <body>
@@ -263,7 +263,25 @@
                     <p id="search-summary">Search across movies and series.</p>
                 </div>
             </div>
+            <div class="browse-toolbar" id="browse-toolbar" hidden>
+                <div>
+                    <span class="browse-live-dot" aria-hidden="true"></span>
+                    <span>Live catalog</span>
+                </div>
+                <label for="browse-sort">Sort</label>
+                <select id="browse-sort">
+                    <option value="popular">Popular</option>
+                    <option value="rating">Top rated</option>
+                    <option value="latest">Newest</option>
+                    <option value="title">A–Z</option>
+                </select>
+            </div>
             <div class="media-grid" id="search-grid" aria-live="polite"></div>
+            <div class="browse-loader" id="browse-loader" hidden aria-live="polite">
+                <span class="spinner" aria-hidden="true"></span>
+                <div><strong id="browse-loader-title">Loading more titles</strong><small id="browse-loader-note">More results appear automatically as you scroll.</small></div>
+                <button class="button button-quiet" id="browse-load-more" type="button">Load more</button>
+            </div>
             <div class="empty-state" id="search-empty" hidden>
                 <span class="empty-icon" aria-hidden="true">⌕</span>
                 <h2>No titles found</h2>
@@ -504,6 +522,10 @@
                 <p class="section-kicker">Now playing</p>
                 <h2 id="player-title">TShow player</h2>
             </div>
+            <div class="player-window-actions">
+                <button class="player-icon-button" id="player-pip" type="button" title="Picture in Picture" aria-label="Picture in Picture">▣</button>
+                <button class="player-icon-button" id="player-fullscreen" type="button" title="Full screen" aria-label="Full screen">⛶</button>
+            </div>
             <button class="dialog-close player-close" id="player-close" type="button" aria-label="Close player">×</button>
         </div>
 
@@ -588,7 +610,10 @@
                 <strong id="player-source-title">Public demo</strong>
                 <p id="player-source-note">Short CC0 sample used only to test browser playback.</p>
             </div>
-            <span class="legal-chip">Authorized sources only</span>
+            <div class="player-footer-meta">
+                <span class="player-shortcuts">Space Play · M Mute · F Fullscreen · P PiP</span>
+                <span class="legal-chip">Direct provider playback</span>
+            </div>
         </div>
     </dialog>
 
