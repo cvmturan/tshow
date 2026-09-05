@@ -140,10 +140,35 @@ test('IMDb permanent pages use catalog metadata and direct legal viewing links',
 });
 
 test('unknown numeric permanent pages return not found instead of fake metadata', async () => {
-  const response = await fetch(`${baseURL}/movie/999999999999/missing`);
-  const html = await response.text();
-  assert.equal(response.status, 404);
-  assert.doesNotMatch(html, /Unknown Movie/);
+  const originalSearch = addonManager.searchCatalogs;
+  addonManager.searchCatalogs = async () => ({ groups: [] });
+  try {
+    const response = await fetch(`${baseURL}/movie/999999999999/missing`);
+    const html = await response.text();
+    assert.equal(response.status, 404);
+    assert.doesNotMatch(html, /Unknown Movie/);
+  } finally {
+    addonManager.searchCatalogs = originalSearch;
+  }
+});
+
+test('old numeric catalog links recover to their stable IMDb page', async () => {
+  const originalSearch = addonManager.searchCatalogs;
+  addonManager.searchCatalogs = async () => ({
+    groups: [{
+      type: 'movie',
+      data: { metas: [{ id: 'tt1375666', type: 'movie', name: 'Inception' }] }
+    }]
+  });
+  try {
+    const response = await fetch(`${baseURL}/movie/999999999998/inception?country=CA`, {
+      redirect: 'manual'
+    });
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get('location'), '/movie/tt1375666/inception?country=CA');
+  } finally {
+    addonManager.searchCatalogs = originalSearch;
+  }
 });
 
 test('IMDb title matching validates input and resolves the requested media type', async () => {
