@@ -91,6 +91,9 @@
 
         const requestedView = new URLSearchParams(window.location.search).get('view');
         if (['home', 'explore', 'list', 'calendar', 'history', 'addons', 'settings', 'help'].includes(requestedView)) setView(requestedView);
+        const requestedTitle = new URLSearchParams(window.location.search).get('title');
+        const titleMatch = String(requestedTitle || '').match(/^(movie|tv):(\d{1,12})$/);
+        if (titleMatch) openDetails({ id: Number(titleMatch[2]), media_type: titleMatch[1] });
     }
 
     function cacheElements() {
@@ -952,6 +955,12 @@
         shareButton.addEventListener('click', () => shareMedia(media));
 
         actions.append(playButton, trailerButton, listButton, shareButton);
+        const titleURL = publicTitleURL(media);
+        if (titleURL) {
+            const fullPageLink = makeElement('a', 'button button-quiet', 'Full page');
+            fullPageLink.href = `${titleURL}?country=${encodeURIComponent(state.region)}`;
+            actions.append(fullPageLink);
+        }
         main.append(actions);
         main.append(makeElement(
             'p',
@@ -2059,10 +2068,11 @@
     }
 
     async function shareMedia(media) {
+        const titleURL = publicTitleURL(media);
         const shareData = {
             title: `${mediaTitle(media)} · TShow`,
             text: `Discover ${mediaTitle(media)} on TShow`,
-            url: window.location.href.split('#')[0]
+            url: titleURL ? new URL(titleURL, window.location.origin).href : window.location.href.split('#')[0]
         };
         try {
             if (navigator.share) await navigator.share(shareData);
@@ -2073,6 +2083,15 @@
         } catch (error) {
             if (error?.name !== 'AbortError') showToast('Could not share this title.', 'error');
         }
+    }
+
+    function publicTitleURL(media) {
+        const id = String(media?._tmdbId || media?.id || '');
+        if (media?._addonCatalog || !/^\d{1,12}$/.test(id)) return null;
+        const kind = mediaType(media) === 'tv' ? 'series' : 'movie';
+        const slug = mediaTitle(media).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'title';
+        return `/${kind}/${id}/${slug}`;
     }
 
     async function runSearch(rawQuery) {

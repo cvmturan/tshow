@@ -15,6 +15,7 @@ const transcodeRoutes = require('./src/api/transcode');
 const contactRoutes = require('./src/api/contact');
 const addonManager = require('./src/core/addonManager');
 const sampleData = require('./src/core/sampleData');
+const { titlePage } = require('./src/pages/titlePage');
 
 function createApp() {
   const app = express();
@@ -88,6 +89,14 @@ function createApp() {
   app.use('/api/streams', streamRoutes);
   app.use('/api/contact', contactRoutes);
   app.use('/api', (req, res) => res.status(404).json({ error: 'API route not found' }));
+
+  const titleLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 500,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false
+  });
+  app.get('/:type(movie|series)/:id/:slug?', titleLimiter, titlePage);
 
   app.use('/vendor/hls', express.static(path.join(__dirname, 'node_modules', 'hls.js', 'dist'), {
     maxAge: process.env.NODE_ENV === 'production' ? '7d' : 0,

@@ -93,6 +93,24 @@ test('watch-provider endpoint validates ids and degrades safely without a TMDB k
   assert.ok(body.providers && Array.isArray(body.providers.stream));
 });
 
+test('permanent movie pages render safe metadata and provider attribution', async () => {
+  const response = await fetch(`${baseURL}/movie/278/the-shawshank-redemption?country=IN`);
+  const html = await response.text();
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type'), /text\/html/);
+  assert.match(response.headers.get('cache-control'), /public/);
+  assert.match(html, /The Shawshank Redemption/);
+  assert.match(html, /TMDB/);
+  assert.match(html, /JustWatch/);
+  assert.match(html, /rel="canonical" href="https:\/\/showt\.fun\/movie\/278\/the-shawshank-redemption"/);
+});
+
+test('permanent title pages reject invalid identifiers', async () => {
+  const response = await fetch(`${baseURL}/movie/not-a-number/title`);
+  assert.equal(response.status, 404);
+  assert.match(await response.text(), /not found/i);
+});
+
 test('debrid account routes are disabled without a server access key', async () => {
   const { response, data } = await getJSON('/api/debrid/services');
   assert.equal(response.status, 403);

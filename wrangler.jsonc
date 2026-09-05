@@ -21,7 +21,7 @@
     "directory": "./.cloudflare-dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api", "/api/*"]
+    "run_worker_first": ["/api", "/api/*", "/movie/*", "/series/*"]
   },
   "vars": {
     "API_ORIGIN": "https://tshow.onrender.com"
