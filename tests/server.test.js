@@ -163,7 +163,7 @@ test('numeric discovery titles render from their original public catalog', async
     assert.equal(id, 'top');
     return {
       metas: [{
-        id: '1301421',
+        id: 'tt32327559',
         type: 'movie',
         name: 'The Sheep Detectives',
         description: 'A flock sets out to solve a mystery.',
