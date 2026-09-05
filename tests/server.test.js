@@ -105,6 +105,18 @@ test('permanent movie pages render safe metadata and provider attribution', asyn
   assert.match(html, /rel="canonical" href="https:\/\/showt\.fun\/movie\/278\/the-shawshank-redemption"/);
 });
 
+test('IMDb title matching validates input and resolves the requested media type', async () => {
+  const tmdb = require('../src/core/tmdb');
+  const original = tmdb.request;
+  tmdb.request = async () => ({ movie_results: [{ id: 27205 }], tv_results: [] });
+  try {
+    const result = await getJSON('/api/tmdb/resolve/tt1375666?type=movie');
+    assert.equal(result.data.id, 27205);
+    const invalid = await getJSON('/api/tmdb/resolve/bad?type=movie');
+    assert.equal(invalid.response.status, 400);
+  } finally { tmdb.request = original; }
+});
+
 test('permanent title pages reject invalid identifiers', async () => {
   const response = await fetch(`${baseURL}/movie/not-a-number/title`);
   assert.equal(response.status, 404);
