@@ -90,6 +90,9 @@
         ]);
 
         const requestedView = new URLSearchParams(window.location.search).get('view');
+        const browsePath = window.location.pathname.replace(/\/$/, '');
+        if (browsePath === '/movies') showBrowseView('movie');
+        if (browsePath === '/series') showBrowseView('tv');
         if (['home', 'explore', 'list', 'calendar', 'history', 'addons', 'settings', 'help'].includes(requestedView)) setView(requestedView);
         const requestedTitle = new URLSearchParams(window.location.search).get('title');
         const titleMatch = String(requestedTitle || '').match(/^(movie|tv):(\d{1,12})$/);
@@ -714,6 +717,17 @@
             }
 
             const imdbId = state.activeDetails?.external_ids?.imdb_id || state.activeDetails?.imdb_id || state.activeMedia?.imdb_id;
+            if (state.activeMedia._addonCatalog && /^tt\d+$/.test(imdbId || state.activeMedia._stremioId || '')) {
+                try {
+                    const externalId = imdbId || state.activeMedia._stremioId;
+                    const resolved = await api(`/api/tmdb/resolve/${externalId}?type=${type}`);
+                    if (resolved.id) {
+                        state.activeMedia._tmdbId = resolved.id;
+                        const enriched = await api(`/api/tmdb/${type}/${resolved.id}`);
+                        state.activeDetails = { ...enriched, ...state.activeDetails, credits: enriched.credits, recommendations: enriched.recommendations };
+                    }
+                } catch { /* The original add-on details remain usable. */ }
+            }
             if (imdbId && !state.activeMedia.imdb_rating) {
                 try {
                     const addonType = type === 'movie' ? 'movie' : 'series';
@@ -1017,17 +1031,19 @@
         attribution.rel = 'noopener noreferrer';
         heading.append(headingCopy, attribution);
         section.append(heading);
+        const availabilityLink = makeElement('a', 'button button-secondary', 'Compare current offers ↗');
+        availabilityLink.href = data.link || 'https://www.justwatch.com/';
+        availabilityLink.target = '_blank';
+        availabilityLink.rel = 'noopener noreferrer';
+        section.append(availabilityLink);
 
         groups.forEach(([label, items]) => {
             const row = makeElement('div', 'provider-row');
             row.append(makeElement('strong', '', label));
             const list = makeElement('div', 'provider-list');
             items.forEach((provider) => {
-                const providerLink = makeElement('a', 'provider-tile');
-                providerLink.href = data.link || 'https://www.justwatch.com/';
-                providerLink.target = '_blank';
-                providerLink.rel = 'noopener noreferrer';
-                providerLink.title = `See ${provider.name} availability`;
+                const providerLink = makeElement('div', 'provider-tile');
+                providerLink.title = `${provider.name} · ${label}`;
                 if (provider.logo_path) {
                     const image = document.createElement('img');
                     image.src = imageURL(provider.logo_path, 'original');
@@ -2087,7 +2103,7 @@
 
     function publicTitleURL(media) {
         const id = String(media?._tmdbId || media?.id || '');
-        if (media?._addonCatalog || !/^\d{1,12}$/.test(id)) return null;
+        if ((media?._addonCatalog && !media?._tmdbId) || !/^\d{1,12}$/.test(id)) return null;
         const kind = mediaType(media) === 'tv' ? 'series' : 'movie';
         const slug = mediaTitle(media).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
             .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'title';
@@ -2161,6 +2177,7 @@
         elements.searchSummary.textContent = pluralize(items.length, isMovie ? 'movie' : 'series');
         elements.searchGrid.replaceChildren(...items.map((item) => createMediaCard(item)));
         elements.searchEmpty.hidden = items.length > 0;
+        history.replaceState(null, '', isMovie ? '/movies/' : '/series/');
     }
 
     function showCollectionView(collectionName) {
@@ -2255,6 +2272,7 @@
         });
 
         state.activeView = view;
+        if (view !== 'search') history.replaceState(null, '', view === 'home' ? '/' : `/?view=${encodeURIComponent(view)}`);
         updateIndexingForView(view);
         if (view === 'list') renderWatchlist();
         if (view === 'explore') loadExplore();

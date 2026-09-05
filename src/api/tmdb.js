@@ -7,6 +7,17 @@ router.get('/health', (req, res) => {
   res.json({ status: 'ok', tmdbKey: !!process.env.TMDB_API_KEY });
 });
 
+router.get('/resolve/:imdbId', async (req, res) => {
+  const { imdbId } = req.params;
+  const type = req.query.type;
+  if (!/^tt\d{5,12}$/.test(imdbId) || !['movie', 'tv'].includes(type)) return res.status(400).json({ error: 'Invalid title identifier' });
+  try {
+    const data = await tmdb.request(`/find/${imdbId}`, { external_source: 'imdb_id' });
+    const match = data[type === 'tv' ? 'tv_results' : 'movie_results']?.[0];
+    return res.json({ id: match?.id || null, type });
+  } catch { return res.status(503).json({ error: 'Title matching is temporarily unavailable' }); }
+});
+
 router.get('/trending/:mediaType?/:timeWindow?', async (req, res) => {
   const { mediaType = 'all', timeWindow = 'week' } = req.params;
   try {
