@@ -5,5 +5,6 @@ Disallow: /*?view=list
 Disallow: /*?view=history
 Disallow: /*?view=calendar
 Disallow: /*?view=addons
+Disallow: /*?view=settings
 Sitemap: https://showt.fun/sitemap.xml
 Sitemap: https://showt.fun/news-sitemap.xml

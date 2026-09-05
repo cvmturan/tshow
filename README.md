@@ -9,7 +9,7 @@ It works immediately with a fresh public metadata catalog, an offline fallback, 
 - Responsive hero, movie/series rails, search, details, ratings, and trailers
 - Working HTML5 player with source selection, subtitles, speed, fullscreen, and progress
 - Continue Watching and My List stored only in the browser
-- “Open video” for files already on your computer; the file is never uploaded
+- Country-based legal watch-provider results stored as a browser preference
 - Per-browser manual add-on install, list, refresh, and remove controls
 - Permanent Cinemeta movie/series search plus legal TVmaze series search, with an offline fallback
 - Localhost-only server, strict browser security headers, and private-network add-on URL blocking
@@ -100,7 +100,7 @@ Search providers are separate from playback providers. Official Cinemeta movie/s
 
 Catalog add-ons create home-screen rows. Stream-only add-ons appear when **Play** checks a title, but do not add movie rows by themselves. Sources from a user-installed add-on are external-only: safe HTTP/HTTPS links can be opened in VLC or Outplayer or copied, valid BitTorrent info hashes can be handed to a compatible app, and provider pages open separately. TShow does not proxy, download, cache, transcode, or subtitle-relay content from a user-installed add-on. It still fetches that add-on's manifest and catalog, metadata, and stream-description JSON so the interface can list its results.
 
-Built-in lawful player sources, local files, and official trailers can still play in the browser. Unsafe protocols, local-network destinations, and malformed source-app links remain blocked. The Terms, Privacy Policy, Copyright Policy, legal notice, and provider credits are published at `/legal.html`.
+Built-in lawful player sources and official trailers can still play in the browser. Unsafe protocols, local-network destinations, and malformed source-app links remain blocked. The Terms, Privacy Policy, Copyright Policy, legal notice, and provider credits are published at `/legal.html`.
 
 A minimal compatible stream manifest looks like this:
 

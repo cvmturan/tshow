@@ -51,10 +51,10 @@
 
             <p class="sidebar-label">Your services</p>
             <button class="nav-link" type="button" data-view="addons"><span aria-hidden="true">◇</span> Add-ons</button>
-            <button class="nav-link" type="button" id="open-local-button"><span aria-hidden="true">↥</span> Open video</button>
             <button class="nav-link install-app-button" id="install-app-button" type="button" hidden><span aria-hidden="true">↓</span> Install app</button>
 
             <p class="sidebar-label">Support</p>
+            <button class="nav-link" type="button" data-view="settings"><span aria-hidden="true">⚙</span> Settings</button>
             <button class="nav-link" type="button" data-view="help"><span aria-hidden="true">?</span> Help & contact</button>
         </nav>
 
@@ -89,7 +89,6 @@
         </form>
 
         <time class="header-clock" id="header-clock" aria-label="Current local time"></time>
-        <input id="local-video-input" type="file" accept="video/*,.mkv" hidden>
     </header>
 
     <main id="main-content">
@@ -450,6 +449,25 @@
                         <button class="button button-primary" id="contact-submit" type="submit">Prepare email</button>
                         <p class="form-status" id="contact-status" role="status" aria-live="polite"></p>
                     </form>
+                </section>
+            </div>
+        </section>
+
+        <section class="view page-view settings-view" id="settings-view" data-view-panel="settings" hidden>
+            <div class="page-heading">
+                <div><p class="eyebrow">Preferences</p><h1>Settings</h1><p>Simple controls for this browser. No account is required.</p></div>
+            </div>
+            <div class="settings-grid">
+                <section class="settings-card">
+                    <div><p class="section-kicker">Viewing region</p><h2>Streaming availability</h2><p>Choose the country used for legal watch-provider results.</p></div>
+                    <label for="region-select">Country</label>
+                    <select id="region-select">
+                        <option value="IN">India</option><option value="CA">Canada</option><option value="US">United States</option><option value="GB">United Kingdom</option><option value="AU">Australia</option><option value="AE">United Arab Emirates</option><option value="DE">Germany</option><option value="FR">France</option>
+                    </select>
+                </section>
+                <section class="settings-card">
+                    <div><p class="section-kicker">Privacy</p><h2>Stored in this browser</h2><p>Your region, list, history and add-on choices remain local to this browser. TShow has no user-profile database.</p></div>
+                    <a class="button button-quiet" href="/legal.html#privacy">Read privacy policy</a>
                 </section>
             </div>
         </section>
