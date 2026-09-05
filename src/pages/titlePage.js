@@ -122,11 +122,16 @@ async function resolveCatalogTitleBySlug(slug, type) {
   return { id: String(match.id), title: String(match.name || match.title) };
 }
 
-async function resolveDiscoveryTitle(id, type) {
+async function resolveDiscoveryTitle(id, type, slug) {
   const addonType = type === 'tv' ? 'series' : 'movie';
   const result = await addonManager.getCatalog('org.cvmturan.discovery', addonType, 'top');
-  const meta = (result?.metas || []).find((candidate) => String(candidate?.id || '') === String(id));
-  return normalizeCinemeta(meta, id, type);
+  const requestedSlug = slugify(slug);
+  const meta = (result?.metas || []).find((candidate) =>
+    String(candidate?.id || '') === String(id) ||
+    (slug && slugify(candidate?.name || candidate?.title || '') === requestedSlug)
+  );
+  const stableId = /^tt\d{5,12}$/i.test(String(meta?.id || '')) ? String(meta.id) : id;
+  return normalizeCinemeta(meta, stableId, type);
 }
 
 function renderProviders(groups, link, country, fallbackOffers = [], fallbackURL = 'https://www.justwatch.com/') {
@@ -219,7 +224,7 @@ async function titlePage(req, res) {
         const fallbackTitle = fallback?.title || fallback?.name || '';
         details = /^Unknown (?:Movie|Series)$/.test(fallbackTitle) ? null : fallback;
         if (!details) {
-          details = await resolveDiscoveryTitle(id, type).catch(() => null);
+          details = await resolveDiscoveryTitle(id, type, req.params.slug).catch(() => null);
         }
         if (!details) {
           recoveredTitle = await resolveCatalogTitleBySlug(req.params.slug, type).catch(() => null);
