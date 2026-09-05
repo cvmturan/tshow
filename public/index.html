@@ -4,8 +4,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#090a0d">
-    <meta name="description" content="TShow is a private, local-first movie and series discovery app with manual add-on support.">
-    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+    <meta name="description" content="Discover movies, series, official trailers, viewing options and original guides with TShow.">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <link rel="canonical" href="https://showt.fun/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="TShow">
+    <meta property="og:title" content="TShow · Movies, series and trailers">
+    <meta property="og:description" content="Discover movies, series, official trailers, viewing options and original guides.">
+    <meta property="og:url" content="https://showt.fun/">
+    <meta property="og:image" content="https://showt.fun/assets/tshow-icon-512.png">
     <meta name="application-name" content="TShow">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -14,9 +21,10 @@
     <link rel="icon" href="/assets/tshow-icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="/assets/tshow-icon-192.png">
     <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="stylesheet" href="/css/main.css?v=20260905-1">
+    <link rel="stylesheet" href="/css/main.css?v=20260906-1">
     <script src="/vendor/hls/hls.min.js" defer></script>
-    <script src="/js/app.js?v=20260905-3" defer></script>
+    <script src="/js/app.js?v=20260906-1" defer></script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"TShow","url":"https://showt.fun/","logo":"https://showt.fun/assets/tshow-icon-512.png","email":"support@showt.fun"}</script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
@@ -33,6 +41,7 @@
             <button class="nav-link is-active" type="button" data-view="home"><span aria-hidden="true">⌂</span> Home</button>
             <button class="nav-link" type="button" data-browse-collection="movies"><span aria-hidden="true">◉</span> Movies</button>
             <button class="nav-link" type="button" data-browse-collection="series"><span aria-hidden="true">▣</span> Series</button>
+            <button class="nav-link" type="button" data-view="explore"><span aria-hidden="true">✦</span> Explore</button>
             <button class="nav-link" type="button" data-view="list">
                 <span aria-hidden="true">＋</span> My list
                 <span class="nav-count" id="list-count" hidden>0</span>
@@ -207,6 +216,27 @@
                     <div class="addon-catalogs-stack" id="addon-catalogs-container" aria-live="polite"></div>
                 </section>
             </div>
+        </section>
+
+        <section class="view page-view explore-view" id="explore-view" data-view-panel="explore" hidden>
+            <div class="page-heading explore-heading">
+                <div><p class="eyebrow">TShow editorial</p><h1>Explore more, scroll less</h1><p>Original guides, useful collections and release notes—all in one simple place.</p></div>
+                <a class="button button-secondary" href="/news/">Open all stories</a>
+            </div>
+            <div class="explore-tabs" id="explore-tabs" role="tablist" aria-label="Explore topics">
+                <button class="explore-tab is-active" type="button" data-explore-filter="all" role="tab" aria-selected="true">All</button>
+                <button class="explore-tab" type="button" data-explore-filter="news" role="tab" aria-selected="false">News</button>
+                <button class="explore-tab" type="button" data-explore-filter="release" role="tab" aria-selected="false">Releases</button>
+                <button class="explore-tab" type="button" data-explore-filter="collection" role="tab" aria-selected="false">Collections</button>
+                <button class="explore-tab" type="button" data-explore-filter="guide" role="tab" aria-selected="false">Guides</button>
+            </div>
+            <div class="explore-grid" id="explore-grid" aria-live="polite">
+                <div class="explore-loading">Preparing stories…</div>
+            </div>
+            <aside class="partner-strip">
+                <div><p class="section-kicker">For brands and creators</p><h2>Reach viewers without interrupting playback</h2><p>Sponsorships and future ads stay on editorial pages—never inside the player or private add-on screens.</p></div>
+                <a class="button button-quiet" href="/partners/">Partner with TShow</a>
+            </aside>
         </section>
 
         <section class="view page-view" id="list-view" data-view-panel="list" hidden>
@@ -438,6 +468,8 @@
                 <a href="/legal.html#privacy">Privacy</a>
                 <a href="/legal.html#copyright">Copyright</a>
                 <a href="/legal.html#notice">Legal notice</a>
+                <a href="/?view=explore">Explore</a>
+                <a href="/partners/">Partners</a>
                 <button class="footer-link nav-trigger" type="button" data-view="help">Contact</button>
             </nav>
         </div>

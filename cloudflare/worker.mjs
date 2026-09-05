@@ -1,11 +1,12 @@
 const DEFAULT_API_ORIGIN = 'https://tshow.onrender.com';
 
-const RESPONSE_SECURITY_HEADERS = {
+const BASE_SECURITY_HEADERS = {
   'Referrer-Policy': 'no-referrer',
-  'X-Robots-Tag': 'noindex, nofollow, noarchive, nosnippet, noimageindex',
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY'
 };
+
+const PRIVATE_ROBOTS = 'noindex, nofollow, noarchive, nosnippet, noimageindex';
 
 function apiOrigin(value, requestURL) {
   try {
@@ -50,9 +51,16 @@ function cacheKey(request) {
   });
 }
 
-function withSecurityHeaders(response) {
+function withSecurityHeaders(response, requestURL) {
   const headers = new Headers(response.headers);
-  for (const [name, value] of Object.entries(RESPONSE_SECURITY_HEADERS)) headers.set(name, value);
+  for (const [name, value] of Object.entries(BASE_SECURITY_HEADERS)) headers.set(name, value);
+  if (requestURL) {
+    const view = requestURL.searchParams.get('view');
+    const privateView = ['list', 'calendar', 'history', 'addons', 'help'].includes(view);
+    if (requestURL.pathname === '/api' || requestURL.pathname.startsWith('/api/') || privateView) {
+      headers.set('X-Robots-Tag', PRIVATE_ROBOTS);
+    }
+  }
 
   return new Response(response.body, {
     status: response.status,
@@ -61,8 +69,8 @@ function withSecurityHeaders(response) {
   });
 }
 
-function withEdgeHeaders(response, cacheStatus) {
-  const secured = withSecurityHeaders(response);
+function withEdgeHeaders(response, cacheStatus, requestURL) {
+  const secured = withSecurityHeaders(response, requestURL);
   const headers = new Headers(secured.headers);
   headers.set('X-TShow-Edge-Cache', cacheStatus);
   return new Response(secured.body, {
@@ -78,7 +86,7 @@ async function proxyAPI(request, env, ctx) {
   if (!origin) {
     return Response.json(
       { error: 'The TShow API origin is not configured correctly.' },
-      { status: 503, headers: RESPONSE_SECURITY_HEADERS }
+      { status: 503, headers: { ...BASE_SECURITY_HEADERS, 'X-Robots-Tag': PRIVATE_ROBOTS } }
     );
   }
 
@@ -89,7 +97,7 @@ async function proxyAPI(request, env, ctx) {
   if (key && edgeCache) {
     try {
       const cached = await edgeCache.match(key);
-      if (cached) return withEdgeHeaders(cached, 'HIT');
+      if (cached) return withEdgeHeaders(cached, 'HIT', incomingURL);
     } catch {
       // A cache outage must not make the API unavailable.
     }
@@ -122,11 +130,11 @@ async function proxyAPI(request, env, ctx) {
   } catch {
     return Response.json(
       { error: 'The TShow API is temporarily unavailable.' },
-      { status: 502, headers: RESPONSE_SECURITY_HEADERS }
+      { status: 502, headers: { ...BASE_SECURITY_HEADERS, 'X-Robots-Tag': PRIVATE_ROBOTS } }
     );
   }
 
-  const response = withEdgeHeaders(upstream, ttl ? 'MISS' : 'BYPASS');
+  const response = withEdgeHeaders(upstream, ttl ? 'MISS' : 'BYPASS', incomingURL);
   const contentType = response.headers.get('content-type') || '';
   if (key && edgeCache && response.status === 200 && contentType.includes('application/json')) {
     const cachedResponse = response.clone();
@@ -142,6 +150,6 @@ export default {
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
       return proxyAPI(request, env, ctx);
     }
-    return withSecurityHeaders(await env.ASSETS.fetch(request));
+    return withSecurityHeaders(await env.ASSETS.fetch(request), url);
   }
 };

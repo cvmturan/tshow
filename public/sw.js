@@ -1,12 +1,12 @@
 'use strict';
 
-const SHELL_CACHE = 'tshow-shell-v8';
+const SHELL_CACHE = 'tshow-shell-v9';
 const SHELL_FILES = [
   '/',
   '/index.html',
   '/legal.html',
-  '/css/main.css?v=20260905-1',
-  '/js/app.js?v=20260905-3',
+  '/css/main.css?v=20260906-1',
+  '/js/app.js?v=20260906-1',
   '/manifest.webmanifest',
   '/assets/tshow-logo.png',
   '/assets/tshow-icon-192.png',
@@ -34,14 +34,17 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate') {
+    const isAppRoute = url.pathname === '/' || url.pathname === '/index.html';
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(SHELL_CACHE).then((cache) => cache.put('/index.html', copy));
+          if (isAppRoute && response.ok) {
+            const copy = response.clone();
+            caches.open(SHELL_CACHE).then((cache) => cache.put('/index.html', copy));
+          }
           return response;
         })
-        .catch(() => caches.match('/index.html'))
+        .catch(() => isAppRoute ? caches.match('/index.html') : Response.error())
     );
     return;
   }
