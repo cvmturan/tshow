@@ -122,6 +122,13 @@ async function resolveCatalogTitleBySlug(slug, type) {
   return { id: String(match.id), title: String(match.name || match.title) };
 }
 
+async function resolveDiscoveryTitle(id, type) {
+  const addonType = type === 'tv' ? 'series' : 'movie';
+  const result = await addonManager.getCatalog('org.cvmturan.discovery', addonType, 'top');
+  const meta = (result?.metas || []).find((candidate) => String(candidate?.id || '') === String(id));
+  return normalizeCinemeta(meta, id, type);
+}
+
 function renderProviders(groups, link, country, fallbackOffers = [], fallbackURL = 'https://www.justwatch.com/') {
   if (!groups.length && fallbackOffers.length) return `<section class="title-section"><div class="title-section-heading"><p class="section-kicker">Where to watch · ${country}</p><h2>Available viewing links</h2><p>Current legal availability links returned by the built-in WatchHub catalog.</p></div><div class="title-provider-list">${fallbackOffers.map((offer) => `<a class="title-provider" href="${escapeHTML(offer.url)}" target="_blank" rel="noopener noreferrer"><span><strong>${escapeHTML(offer.name)}</strong><small>${escapeHTML(offer.description || 'Open provider')}</small></span></a>`).join('')}</div><p class="provider-credit-line">Availability can change. Confirm the final price and region on the provider page.</p></section>`;
   if (!groups.length) return `<section class="title-section"><div class="title-section-heading"><p class="section-kicker">Where to watch · ${country}</p><h2>No provider listing found</h2></div><p class="title-muted">No service was returned for this title and country. Availability changes frequently.</p><a class="button button-secondary" href="${escapeHTML(safeExternalURL(link) || fallbackURL)}" target="_blank" rel="noopener noreferrer">Search current availability ↗</a><p class="provider-credit-line">Availability search powered by JustWatch.</p></section>`;
@@ -212,6 +219,9 @@ async function titlePage(req, res) {
         const fallbackTitle = fallback?.title || fallback?.name || '';
         details = /^Unknown (?:Movie|Series)$/.test(fallbackTitle) ? null : fallback;
         if (!details) {
+          details = await resolveDiscoveryTitle(id, type).catch(() => null);
+        }
+        if (!details) {
           recoveredTitle = await resolveCatalogTitleBySlug(req.params.slug, type).catch(() => null);
         }
       }
@@ -229,4 +239,7 @@ async function titlePage(req, res) {
   }
 }
 
-module.exports = { titlePage, renderTitlePage, slugify, providerGroups, resolveCatalogTitleBySlug };
+module.exports = {
+  titlePage, renderTitlePage, slugify, providerGroups,
+  resolveCatalogTitleBySlug, resolveDiscoveryTitle
+};

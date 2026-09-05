@@ -141,7 +141,9 @@ test('IMDb permanent pages use catalog metadata and direct legal viewing links',
 
 test('unknown numeric permanent pages return not found instead of fake metadata', async () => {
   const originalSearch = addonManager.searchCatalogs;
+  const originalCatalog = addonManager.getCatalog;
   addonManager.searchCatalogs = async () => ({ groups: [] });
+  addonManager.getCatalog = async () => ({ metas: [] });
   try {
     const response = await fetch(`${baseURL}/movie/999999999999/missing`);
     const html = await response.text();
@@ -149,11 +151,44 @@ test('unknown numeric permanent pages return not found instead of fake metadata'
     assert.doesNotMatch(html, /Unknown Movie/);
   } finally {
     addonManager.searchCatalogs = originalSearch;
+    addonManager.getCatalog = originalCatalog;
+  }
+});
+
+test('numeric discovery titles render from their original public catalog', async () => {
+  const originalCatalog = addonManager.getCatalog;
+  addonManager.getCatalog = async (addonId, type, id) => {
+    assert.equal(addonId, 'org.cvmturan.discovery');
+    assert.equal(type, 'movie');
+    assert.equal(id, 'top');
+    return {
+      metas: [{
+        id: '1301421',
+        type: 'movie',
+        name: 'The Sheep Detectives',
+        description: 'A flock sets out to solve a mystery.',
+        poster: 'https://images.example.test/sheep.jpg',
+        imdbRating: '7.4',
+        releaseInfo: '2026'
+      }]
+    };
+  };
+  try {
+    const response = await fetch(`${baseURL}/movie/1301421/the-sheep-detectives?country=US`);
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, /The Sheep Detectives/);
+    assert.match(html, /7\.4[\s\S]*IMDb/);
+    assert.doesNotMatch(html, /Title not found/);
+  } finally {
+    addonManager.getCatalog = originalCatalog;
   }
 });
 
 test('old numeric catalog links recover to their stable IMDb page', async () => {
   const originalSearch = addonManager.searchCatalogs;
+  const originalCatalog = addonManager.getCatalog;
+  addonManager.getCatalog = async () => ({ metas: [] });
   addonManager.searchCatalogs = async () => ({
     groups: [{
       type: 'movie',
@@ -168,6 +203,7 @@ test('old numeric catalog links recover to their stable IMDb page', async () => 
     assert.equal(response.headers.get('location'), '/movie/tt1375666/inception?country=CA');
   } finally {
     addonManager.searchCatalogs = originalSearch;
+    addonManager.getCatalog = originalCatalog;
   }
 });
 
