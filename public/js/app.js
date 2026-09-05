@@ -7,7 +7,8 @@
         recentlyViewed: 'tshow:recent:v1',
         dataSaver: 'streamflix:data-saver:v1',
         addonURLs: 'streamflix:addons:v1',
-        addonClientId: 'streamflix:addon-client:v1'
+        addonClientId: 'streamflix:addon-client:v1',
+        region: 'tshow:region:v1'
     };
 
     const addonClientId = loadOrCreateAddonClientId();
@@ -45,7 +46,6 @@
         activeHlsURL: null,
         transcodeTried: false,
         trailerMode: false,
-        localObjectURL: null,
         lastProgressSave: 0,
         subtitleLibrary: [],
         subtitleObjectURL: null,
@@ -58,6 +58,7 @@
         installPrompt: null,
         addonFilter: 'all',
         addonSearch: '',
+        region: loadStoredRegion(),
         exploreItems: [],
         exploreFilter: 'all'
     };
@@ -89,7 +90,7 @@
         ]);
 
         const requestedView = new URLSearchParams(window.location.search).get('view');
-        if (['home', 'explore', 'list', 'calendar', 'history', 'addons', 'help'].includes(requestedView)) setView(requestedView);
+        if (['home', 'explore', 'list', 'calendar', 'history', 'addons', 'settings', 'help'].includes(requestedView)) setView(requestedView);
     }
 
     function cacheElements() {
@@ -103,8 +104,6 @@
             'search-form',
             'search-input',
             'search-clear',
-            'open-local-button',
-            'local-video-input',
             'list-count',
             'hero',
             'hero-art',
@@ -155,6 +154,7 @@
             'contact-form',
             'contact-submit',
             'contact-status',
+            'region-select',
             'details-dialog',
             'details-close',
             'details-content',
@@ -272,11 +272,11 @@
             if (state.activeView === 'search') setView('home');
         });
 
-        elements.openLocalButton.addEventListener('click', () => {
-            elements.localVideoInput.click();
-            closeSidebar();
+        elements.regionSelect.addEventListener('change', () => {
+            state.region = elements.regionSelect.value;
+            localStorage.setItem(STORAGE_KEYS.region, state.region);
+            showToast(`Viewing region changed to ${elements.regionSelect.selectedOptions[0].textContent}.`);
         });
-        elements.localVideoInput.addEventListener('change', openLocalVideo);
 
         elements.heroPlay.addEventListener('click', () => {
             if (!state.featured) return;
@@ -725,9 +725,8 @@
             const tmdbId = state.activeMedia?._tmdbId || state.activeDetails?.id;
             if (/^\d+$/.test(String(tmdbId || ''))) {
                 try {
-                    const localeRegion = String(navigator.language || '').match(/-([A-Z]{2})$/i)?.[1] || 'IN';
                     state.activeDetails.watchProviders = await api(
-                        `/api/tmdb/watch-providers/${type}/${encodeURIComponent(tmdbId)}?country=${encodeURIComponent(localeRegion)}`
+                        `/api/tmdb/watch-providers/${type}/${encodeURIComponent(tmdbId)}?country=${encodeURIComponent(state.region)}`
                     );
                 } catch {
                     state.activeDetails.watchProviders = null;
@@ -1869,37 +1868,6 @@
         elements.externalSource.hidden = false;
     }
 
-    function openLocalVideo(event) {
-        const file = event.target.files?.[0];
-        if (!file) return;
-
-        resetTrailerFrame();
-        if (state.localObjectURL) URL.revokeObjectURL(state.localObjectURL);
-        state.localObjectURL = URL.createObjectURL(file);
-        elements.videoPlayer.removeAttribute('poster');
-        state.playerMedia = null;
-        state.streams = [{
-            url: state.localObjectURL,
-            name: file.name,
-            title: file.name,
-            description: 'Opened directly from this computer. The file was not uploaded.',
-            type: file.type || '',
-            format: file.type.includes('webm') ? 'webm' : 'mp4',
-            playbackMode: 'direct',
-            browserReady: true,
-            sourceAddonName: 'This computer'
-        }];
-
-        elements.playerTitle.textContent = file.name;
-        state.sourceFilter = 'playable';
-        state.activeStreamIndex = null;
-        renderSourcePicker();
-        openDialog(elements.playerDialog);
-        applyStream(0);
-        showToast('Opened locally. Nothing was uploaded.');
-        event.target.value = '';
-    }
-
     function closePlayer() {
         savePlaybackProgress(true);
         clearVideoElement();
@@ -1918,10 +1886,6 @@
         state.playerMedia = null;
         elements.speedSelect.disabled = false;
 
-        if (state.localObjectURL) {
-            URL.revokeObjectURL(state.localObjectURL);
-            state.localObjectURL = null;
-        }
         if (state.subtitleObjectURL) {
             URL.revokeObjectURL(state.subtitleObjectURL);
             state.subtitleObjectURL = null;
@@ -2278,11 +2242,12 @@
         if (view === 'addons') loadAddons({ quiet: true });
         if (view === 'calendar') renderCalendar();
         if (view === 'history') renderHistory();
+        if (view === 'settings') elements.regionSelect.value = state.region;
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function updateIndexingForView(view) {
-        const privateViews = new Set(['list', 'calendar', 'history', 'addons', 'help']);
+        const privateViews = new Set(['list', 'calendar', 'history', 'addons', 'settings', 'help']);
         const robots = document.querySelector('meta[name="robots"]');
         if (robots) robots.content = privateViews.has(view)
             ? 'noindex, nofollow, noarchive'
@@ -3249,6 +3214,12 @@
         } catch {
             return null;
         }
+    }
+
+    function loadStoredRegion() {
+        const saved = String(localStorage.getItem(STORAGE_KEYS.region) || '').toUpperCase();
+        if (/^[A-Z]{2}$/.test(saved)) return saved;
+        return String(navigator.language || '').match(/-([A-Z]{2})$/i)?.[1]?.toUpperCase() || 'IN';
     }
 
     function loadOrCreateAddonClientId() {

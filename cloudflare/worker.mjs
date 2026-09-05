@@ -56,7 +56,7 @@ function withSecurityHeaders(response, requestURL) {
   for (const [name, value] of Object.entries(BASE_SECURITY_HEADERS)) headers.set(name, value);
   if (requestURL) {
     const view = requestURL.searchParams.get('view');
-    const privateView = ['list', 'calendar', 'history', 'addons', 'help'].includes(view);
+    const privateView = ['list', 'calendar', 'history', 'addons', 'settings', 'help'].includes(view);
     if (requestURL.pathname === '/api' || requestURL.pathname.startsWith('/api/') || privateView) {
       headers.set('X-Robots-Tag', PRIVATE_ROBOTS);
     }
