@@ -103,6 +103,25 @@ function justWatchSearch(title, countryCode) {
   return `https://www.justwatch.com/${locales[countryCode] || 'in'}/search?q=${encodeURIComponent(title)}`;
 }
 
+async function resolveCatalogTitleBySlug(slug, type) {
+  const normalizedSlug = slugify(slug);
+  if (!slug || normalizedSlug === 'title') return null;
+  const query = String(slug).replace(/-/g, ' ').trim();
+  if (query.length < 2) return null;
+
+  const addonType = type === 'tv' ? 'series' : 'movie';
+  const result = await addonManager.searchCatalogs(query);
+  const candidates = (result?.groups || [])
+    .filter((group) => group?.type === addonType)
+    .flatMap((group) => Array.isArray(group?.data?.metas) ? group.data.metas : []);
+  const match = candidates.find((meta) =>
+    /^tt\d{5,12}$/i.test(String(meta?.id || '')) &&
+    slugify(meta?.name || meta?.title || '') === normalizedSlug
+  );
+  if (!match) return null;
+  return { id: String(match.id), title: String(match.name || match.title) };
+}
+
 function renderProviders(groups, link, country, fallbackOffers = [], fallbackURL = 'https://www.justwatch.com/') {
   if (!groups.length && fallbackOffers.length) return `<section class="title-section"><div class="title-section-heading"><p class="section-kicker">Where to watch · ${country}</p><h2>Available viewing links</h2><p>Current legal availability links returned by the built-in WatchHub catalog.</p></div><div class="title-provider-list">${fallbackOffers.map((offer) => `<a class="title-provider" href="${escapeHTML(offer.url)}" target="_blank" rel="noopener noreferrer"><span><strong>${escapeHTML(offer.name)}</strong><small>${escapeHTML(offer.description || 'Open provider')}</small></span></a>`).join('')}</div><p class="provider-credit-line">Availability can change. Confirm the final price and region on the provider page.</p></section>`;
   if (!groups.length) return `<section class="title-section"><div class="title-section-heading"><p class="section-kicker">Where to watch · ${country}</p><h2>No provider listing found</h2></div><p class="title-muted">No service was returned for this title and country. Availability changes frequently.</p><a class="button button-secondary" href="${escapeHTML(safeExternalURL(link) || fallbackURL)}" target="_blank" rel="noopener noreferrer">Search current availability ↗</a><p class="provider-credit-line">Availability search powered by JustWatch.</p></section>`;
@@ -173,6 +192,7 @@ async function titlePage(req, res) {
     let details;
     let providers = { results: {} };
     let fallbackOffers = [];
+    let recoveredTitle;
     if (/^tt\d{5,12}$/i.test(id)) {
       const addonType = type === 'tv' ? 'series' : 'movie';
       const metaResult = await addonManager.getMeta('org.streamflix.cinemeta', addonType, id);
@@ -191,7 +211,15 @@ async function titlePage(req, res) {
         const fallback = type === 'tv' ? sampleData.getTVDetail(id) : sampleData.getMovieDetail(id);
         const fallbackTitle = fallback?.title || fallback?.name || '';
         details = /^Unknown (?:Movie|Series)$/.test(fallbackTitle) ? null : fallback;
+        if (!details) {
+          recoveredTitle = await resolveCatalogTitleBySlug(req.params.slug, type).catch(() => null);
+        }
       }
+    }
+    if (recoveredTitle) {
+      const kind = type === 'tv' ? 'series' : 'movie';
+      const query = new URLSearchParams({ country }).toString();
+      return res.redirect(302, `/${kind}/${recoveredTitle.id}/${slugify(recoveredTitle.title)}?${query}`);
     }
     if (!details?.id) return res.status(404).send('Title not found');
     res.set('Cache-Control', 'public, max-age=300, s-maxage=1800, stale-while-revalidate=86400');
@@ -201,4 +229,4 @@ async function titlePage(req, res) {
   }
 }
 
-module.exports = { titlePage, renderTitlePage, slugify, providerGroups };
+module.exports = { titlePage, renderTitlePage, slugify, providerGroups, resolveCatalogTitleBySlug };

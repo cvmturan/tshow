@@ -2103,7 +2103,10 @@
 
     function publicTitleURL(media) {
         const imdbId = media?.imdb_id || media?._stremioId;
-        const id = String(media?._tmdbId || (/^tt\d{5,12}$/i.test(String(imdbId || '')) ? imdbId : media?.id) || '');
+        const stableAddonId = media?._addonCatalog && /^tt\d{5,12}$/i.test(String(imdbId || ''))
+            ? imdbId
+            : null;
+        const id = String(stableAddonId || media?._tmdbId || (/^tt\d{5,12}$/i.test(String(imdbId || '')) ? imdbId : media?.id) || '');
         if (!/^(?:\d{1,12}|tt\d{5,12})$/i.test(id)) return null;
         const kind = mediaType(media) === 'tv' ? 'series' : 'movie';
         const slug = mediaTitle(media).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
