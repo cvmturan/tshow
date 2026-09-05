@@ -1515,7 +1515,8 @@
                 ...stream,
                 url: stream.attemptUrl,
                 browserReady: true,
-                playbackMode: 'hls',
+                playbackMode: stream.format === 'hls' ? 'hls' : 'direct',
+                directFromProvider: true,
                 unsupportedReason: null
             };
         }
@@ -1543,18 +1544,18 @@
             const canOpenExternally = isSafeWebURL(stream.externalUrl);
             const canOpenPlayer = isSafeWebURL(stream.externalPlayerUrl);
             const canOpenApp = isSafeExternalAppURL(stream.externalAppUrl);
-            const canTryHls = isSafeWebURL(stream.attemptUrl);
+            const canTryDirect = isSafeWebURL(stream.attemptUrl);
             state.activeExternalURL = canOpenExternally ? stream.externalUrl : null;
             state.activeExternalAppURL = canOpenApp ? stream.externalAppUrl : null;
-            state.activeAttemptIndex = canTryHls ? index : null;
+            state.activeAttemptIndex = canTryDirect ? index : null;
             elements.externalSourceTitle.textContent = canOpenExternally
                 ? 'Open this source with its provider'
                 : canOpenPlayer
                     ? 'Open this source in an external player'
                     : canOpenApp
                         ? 'Open this source in a compatible app'
-                        : canTryHls
-                            ? 'This provider marked the HLS source as app-only'
+                    : canTryDirect
+                            ? 'Try this direct provider link in the browser'
                             : stream.notWebReady
                                 ? 'App-only download or redirect'
                                 : 'This source cannot play in a browser';
@@ -1564,12 +1565,12 @@
                     ? 'This user-added source goes directly from its provider to your device. TShow does not proxy or transcode the video.'
                     : canOpenApp
                         ? 'Your device will hand this source to a compatible app. TShow does not download or operate the source.'
-                        : canTryHls
-                            ? 'You can try the direct HLS link once. It may still fail if the provider blocks browsers or requires an app.'
+                        : canTryDirect
+                            ? 'This HTTPS link has no declared format. TShow can try it directly without proxying; it may still fail if it is a webpage or the provider blocks browsers.'
                             : stream.unsupportedReason ||
                                 'The add-on must provide a direct MP4, WebM, HLS, or an external provider page.';
             elements.openExternalSource.hidden = !canOpenExternally;
-            elements.tryDirectSource.hidden = !canTryHls;
+            elements.tryDirectSource.hidden = !canTryDirect;
             elements.externalSource.hidden = false;
             return;
         }

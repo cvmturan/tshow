@@ -127,6 +127,7 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0, options 
   let browserReady = false;
   let playbackMode = 'unsupported';
   let unsupportedReason = '';
+  let attemptUrl = null;
 
   if (externalOnly && sourceURL) {
     const directFormat = ['mp4', 'webm', 'hls'].includes(format);
@@ -136,6 +137,9 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0, options 
       playbackMode = format === 'hls' ? 'hls' : 'direct';
     } else {
       playbackMode = 'external-player';
+      if (!format && secureForPage && !headerPayload && !notWebReady) {
+        attemptUrl = sourceURL;
+      }
       unsupportedReason = headerPayload
         ? 'This source requires provider-specific headers, so TShow will not relay it through the server.'
         : notWebReady
@@ -216,7 +220,7 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0, options 
     url: playUrl,
     externalPlayerUrl: sourceURL,
     externalAppUrl: appURL,
-    attemptUrl: null,
+    attemptUrl,
     transcodeUrl,
     transcodeLowUrl,
     externalUrl,

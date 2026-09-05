@@ -453,18 +453,25 @@ test('user-added browser streams stay direct and never receive proxy or transcod
     1,
     options
   );
+  const opaqueHttps = classify(
+    { name: 'Private opaque HTTPS', url: 'https://media.example.test/watch?id=opaque' },
+    'org.private',
+    'Private',
+    2,
+    options
+  );
   const torrent = classify(
     { name: 'Private torrent', infoHash: '0123456789abcdef0123456789abcdef01234567' },
     'org.private',
     'Private',
-    2,
+    3,
     options
   );
   const unsafe = classify(
     { name: 'Unsafe', url: 'javascript:alert(1)' },
     'org.private',
     'Private',
-    3,
+    4,
     options
   );
 
@@ -481,6 +488,11 @@ test('user-added browser streams stay direct and never receive proxy or transcod
   assert.equal(withHeaders.url, null);
   assert.equal(withHeaders.playbackMode, 'external-player');
   assert.equal(withHeaders.requiresHeaders, true);
+  assert.equal(opaqueHttps.browserReady, false);
+  assert.equal(opaqueHttps.playbackMode, 'external-player');
+  assert.equal(opaqueHttps.attemptUrl, 'https://media.example.test/watch?id=opaque');
+  assert.equal(opaqueHttps.transcodeUrl, null);
+  assert.equal(opaqueHttps.transcodeLowUrl, null);
   assert.equal(torrent.browserReady, false);
   assert.equal(torrent.url, null);
   assert.equal(torrent.playbackMode, 'external-app');
