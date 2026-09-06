@@ -56,7 +56,9 @@ ipcMain.handle('tshow:play', async (event, payload) => {
   if (!isTrustedSender(event)) return { ok: false, error: 'Untrusted playback request.' };
   try {
     const request = await preparePlaybackRequest(payload);
-    const result = await launchPlayer(request);
+    const result = await launchPlayer(request, {
+      resourcesPath: app.isPackaged ? process.resourcesPath : path.join(__dirname, 'vendor')
+    });
     return { ok: true, ...result };
   } catch (error) {
     return { ok: false, error: error.message || 'The local player could not be opened.' };
