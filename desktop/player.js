@@ -9,7 +9,19 @@ const execFileAsync = promisify(execFile);
 
 function playerArguments(kind, request) {
   if (kind === 'mpv') {
-    const args = ['--force-window=yes', '--keep-open=no', '--really-quiet', `--title=${request.title}`];
+    const args = [
+      '--no-config',
+      '--load-scripts=no',
+      '--ytdl=no',
+      '--force-window=immediate',
+      '--keep-open=no',
+      '--osc=yes',
+      '--input-default-bindings=yes',
+      '--cursor-autohide=1000',
+      '--osd-on-seek=msg-bar',
+      '--no-terminal',
+      `--title=TShow Player — ${request.title}`
+    ];
     const fields = Object.entries(request.headers).map(([name, value]) => `${name}: ${value}`);
     if (fields.length) args.push(`--http-header-fields=${fields.join(',')}`);
     args.push(request.url);
@@ -21,6 +33,11 @@ function playerArguments(kind, request) {
   if (request.headers['User-Agent']) args.push(`--http-user-agent=${request.headers['User-Agent']}`);
   args.push(request.url);
   return args;
+}
+
+function bundledPlayerPath(resourcesPath, platform = process.platform) {
+  if (!resourcesPath || platform !== 'win32') return null;
+  return path.win32.join(resourcesPath, 'mpv', 'mpv.exe');
 }
 
 function knownPlayerPaths(platform = process.platform, env = process.env) {
@@ -56,20 +73,28 @@ async function locateOnPath(command, platform = process.platform) {
   }
 }
 
-async function findPlayer(platform = process.platform, env = process.env) {
+async function findPlayer(platform = process.platform, env = process.env, resourcesPath) {
+  const bundled = bundledPlayerPath(resourcesPath, platform);
+  if (bundled && fs.existsSync(bundled)) {
+    return { executable: bundled, kind: 'mpv', bundled: true };
+  }
   const known = knownPlayerPaths(platform, env).find((candidate) => fs.existsSync(candidate));
-  if (known) return { executable: known, kind: playerKind(known) };
+  if (known) return { executable: known, kind: playerKind(known), bundled: false };
   const names = platform === 'win32' ? ['mpv.exe', 'vlc.exe'] : ['mpv', 'vlc'];
   for (const name of names) {
     const executable = await locateOnPath(name, platform);
-    if (executable) return { executable, kind: playerKind(executable) };
+    if (executable) return { executable, kind: playerKind(executable), bundled: false };
   }
   return null;
 }
 
 async function launchPlayer(request, dependencies = {}) {
-  const player = await (dependencies.findPlayer || findPlayer)();
-  if (!player) throw new Error('Install mpv or VLC, then reopen TShow Desktop.');
+  const player = await (dependencies.findPlayer || findPlayer)(
+    dependencies.platform || process.platform,
+    dependencies.env || process.env,
+    dependencies.resourcesPath
+  );
+  if (!player) throw new Error('The TShow playback engine is missing. Reinstall the latest TShow Desktop build.');
   const spawnProcess = dependencies.spawn || spawn;
   const child = spawnProcess(player.executable, playerArguments(player.kind, request), {
     detached: true,
@@ -77,7 +102,14 @@ async function launchPlayer(request, dependencies = {}) {
     windowsHide: false
   });
   child.unref?.();
-  return { player: player.kind };
+  return { player: player.bundled ? 'TShow Player' : player.kind, bundled: player.bundled };
 }
 
-module.exports = { playerArguments, knownPlayerPaths, playerKind, findPlayer, launchPlayer };
+module.exports = {
+  playerArguments,
+  bundledPlayerPath,
+  knownPlayerPaths,
+  playerKind,
+  findPlayer,
+  launchPlayer
+};

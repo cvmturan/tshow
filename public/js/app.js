@@ -1654,7 +1654,7 @@
                 behaviorHints: stream?.behaviorHints || {}
             });
             if (!result?.ok) throw new Error(result?.error || 'The local player could not be opened.');
-            showToast(`Opened securely in local ${String(result.player || 'player').toUpperCase()}.`, 'info');
+            showToast(`Opened securely in ${String(result.player || 'TShow Player')}.`, 'info');
         } catch (error) {
             showToast(error.message || 'The local player could not be opened.', 'error');
         } finally {

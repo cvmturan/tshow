@@ -27,7 +27,18 @@ jobs:
         run: npm ci
       - name: Run desktop security tests
         run: npm test
-      - name: Build Windows installer and portable app
+      - name: Add verified TShow playback engine
+        shell: pwsh
+        run: |
+          $url = "https://github.com/shinchiro/mpv-winbuild-cmake/releases/download/20260903/mpv-x86_64-20260903-git-69e63f425a.7z"
+          $expected = "418dbfb5feb851cbed33d6c05d8481ba71802621bfd6efe8974522b28d42ac97"
+          Invoke-WebRequest -Uri $url -OutFile mpv.7z
+          $actual = (Get-FileHash mpv.7z -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Playback engine checksum mismatch." }
+          New-Item -ItemType Directory -Force -Path vendor/mpv | Out-Null
+          7z x mpv.7z -ovendor/mpv -y
+          if (-not (Test-Path vendor/mpv/mpv.exe)) { throw "mpv.exe was not extracted." }
+      - name: Build Windows installer with TShow Player
         run: npm run dist:win
       - name: Upload Windows builds
         uses: actions/upload-artifact@v4

@@ -8,7 +8,7 @@ const {
   sanitizePlaybackHeaders,
   preparePlaybackRequest
 } = require('../security');
-const { playerArguments, playerKind } = require('../player');
+const { bundledPlayerPath, playerArguments, playerKind } = require('../player');
 
 const publicLookup = async () => [{ address: '8.8.8.8', family: 4 }];
 
@@ -65,4 +65,11 @@ test('mpv and VLC arguments are built without a shell', () => {
   assert.equal(mpv.at(-1), request.url);
   assert.equal(vlc.at(-1), request.url);
   assert.equal(playerKind('C:\\Program Files\\VideoLAN\\VLC\\vlc.exe'), 'vlc');
+  assert.ok(mpv.includes('--no-config'));
+  assert.ok(mpv.includes('--load-scripts=no'));
+  assert.ok(mpv.some((value) => value.startsWith('--title=TShow Player')));
+  assert.equal(
+    bundledPlayerPath('C:\\Program Files\\TShow\\resources', 'win32'),
+    require('node:path').win32.join('C:\\Program Files\\TShow\\resources', 'mpv', 'mpv.exe')
+  );
 });
