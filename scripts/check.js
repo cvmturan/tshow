@@ -8,6 +8,7 @@ const targets = [
   path.join(root, 'cloudflare'),
   path.join(root, 'src'),
   path.join(root, 'public', 'js'),
+  path.join(root, 'desktop'),
   path.join(root, 'tests')
 ];
 
@@ -36,7 +37,7 @@ for (const file of files) {
   }
 }
 
-for (const jsonFile of ['package.json']) {
+for (const jsonFile of ['package.json', 'desktop/package.json']) {
   try {
     JSON.parse(fs.readFileSync(path.join(root, jsonFile), 'utf8').replace(/^\uFEFF/, ''));
   } catch (error) {

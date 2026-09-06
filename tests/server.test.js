@@ -712,6 +712,7 @@ test('HTML app is served with a strict same-origin security policy', async () =>
   assert.match(html, /data-source-filter="app-only"/);
   assert.match(html, /id="addon-legal-agreement"/);
   assert.match(html, /id="open-in-source-app"/);
+  assert.match(html, /id="open-in-desktop"/);
   assert.match(html, /id="copy-source-link"/);
   assert.match(html, /\/legal\.html#terms/);
   assert.match(html, /TVmaze/);

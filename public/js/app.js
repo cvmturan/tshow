@@ -201,6 +201,7 @@
             'speed-select',
             'data-saver-button',
             'external-player-actions',
+            'open-in-desktop',
             'open-in-vlc',
             'open-in-outplayer',
             'open-in-source-app',
@@ -376,6 +377,7 @@
             elements.videoPlayer.playbackRate = Number(elements.speedSelect.value) || 1;
         });
         elements.dataSaverButton.addEventListener('click', toggleDataSaver);
+        elements.openInDesktop.addEventListener('click', openActiveStreamInDesktop);
         elements.openInVlc.addEventListener('click', openActiveStreamInVlc);
         elements.openInOutplayer.addEventListener('click', openActiveStreamInOutplayer);
         elements.openInSourceApp.addEventListener('click', openActiveStreamInSourceApp);
@@ -1626,6 +1628,9 @@
         const appAvailable = isSafeExternalAppURL(stream?.externalAppUrl);
         const copyAvailable = Boolean(playerAvailable || appAvailable || isSafeWebURL(stream?.externalUrl));
         elements.externalPlayerActions.hidden = !copyAvailable;
+        const desktopAvailable = Boolean(playerAvailable && window.tshowDesktop?.isDesktop);
+        elements.openInDesktop.hidden = !desktopAvailable;
+        elements.openInDesktop.disabled = !desktopAvailable;
         elements.openInVlc.hidden = !playerAvailable;
         elements.openInOutplayer.hidden = !playerAvailable;
         elements.openInVlc.disabled = !playerAvailable;
@@ -1633,6 +1638,28 @@
         elements.openInSourceApp.hidden = !appAvailable;
         elements.openInSourceApp.disabled = !appAvailable;
         elements.copySourceLink.disabled = !copyAvailable;
+    }
+
+    async function openActiveStreamInDesktop() {
+        const stream = state.streams[state.activeStreamIndex];
+        const url = activeExternalPlayerURL();
+        if (!url || !window.tshowDesktop?.isDesktop || typeof window.tshowDesktop.play !== 'function') {
+            return showToast('Open this page in TShow Desktop to use local PC playback.', 'warning');
+        }
+        elements.openInDesktop.disabled = true;
+        try {
+            const result = await window.tshowDesktop.play({
+                url,
+                title: stream?.title || stream?.name || elements.playerTitle.textContent || 'TShow',
+                behaviorHints: stream?.behaviorHints || {}
+            });
+            if (!result?.ok) throw new Error(result?.error || 'The local player could not be opened.');
+            showToast(`Opened securely in local ${String(result.player || 'player').toUpperCase()}.`, 'info');
+        } catch (error) {
+            showToast(error.message || 'The local player could not be opened.', 'error');
+        } finally {
+            elements.openInDesktop.disabled = false;
+        }
     }
 
     function openActiveStreamInVlc() {
