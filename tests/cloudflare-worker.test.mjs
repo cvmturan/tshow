@@ -145,6 +145,33 @@ test('add-on installation rejects local-network and insecure manifest URLs', asy
   }
 });
 
+test('add-on installation retries a provider 403 with a compatible web client request', async (t) => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (_request, options) => {
+    calls += 1;
+    if (calls === 1) {
+      assert.equal(new Headers(options.headers).get('user-agent'), null);
+      return new Response('Forbidden', { status: 403 });
+    }
+    assert.match(new Headers(options.headers).get('user-agent'), /^Mozilla\/5\.0/);
+    return Response.json({
+      id: 'com.example.compatible', name: 'Compatible provider', version: '1.0.0',
+      resources: ['stream'], types: ['movie']
+    });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  const response = await worker.fetch(new Request('https://showt.fun/api/addons/install', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ manifestURL: 'https://addon.example/manifest.json' })
+  }), env(), createContext());
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.manifest.id, 'com.example.compatible');
+  assert.equal(calls, 2);
+});
+
 test('public metadata caching works without caching private add-on routes', async (t) => {
   const originalFetch = globalThis.fetch;
   const originalCaches = globalThis.caches;

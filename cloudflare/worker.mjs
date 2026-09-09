@@ -19,7 +19,48 @@ function customURLs(request) { const raw=request.headers.get('x-tshow-addon-urls
 function normalizeManifest(candidate,options={}) { const resources=Array.isArray(candidate?.resources)?candidate.resources.map(x=>typeof x==='string'?x:x?.name).filter(x=>typeof x==='string').map(x=>x.slice(0,80)).slice(0,30):[]; const catalogs=Array.isArray(candidate?.catalogs)?candidate.catalogs.filter(x=>x?.type&&x?.id).slice(0,100).map(x=>({type:String(x.type).slice(0,40),id:String(x.id).slice(0,120),name:String(x.name||x.id).slice(0,120),genres:Array.isArray(x.genres)?x.genres.map(String).slice(0,100):[],extra:Array.isArray(x.extra)?x.extra.filter(e=>e&&typeof e.name==='string').slice(0,30).map(e=>({name:e.name.slice(0,80),isRequired:e.isRequired===true,options:Array.isArray(e.options)?e.options.map(String).slice(0,100):[]})):[]})):[]; const h=candidate?.behaviorHints&&typeof candidate.behaviorHints==='object'?candidate.behaviorHints:{}; return {id:String(candidate?.id||''),name:String(candidate?.name||''),version:String(candidate?.version||'1.0.0').slice(0,40),description:String(candidate?.description||'').slice(0,500),resources,types:Array.isArray(candidate?.types)?candidate.types.map(String).slice(0,30):[],idPrefixes:Array.isArray(candidate?.idPrefixes)?candidate.idPrefixes.map(String).slice(0,50):[],catalogs,logo:typeof candidate?.logo==='string'?candidate.logo.slice(0,4000):null,behaviorHints:{configurable:h.configurable===true,configurationRequired:h.configurationRequired===true},manifestURL:candidate?.manifestURL||null,isBuiltIn:candidate?.isBuiltIn===true,isCustom:options.custom===true,isRemovable:options.custom===true}; }
 function validManifest(x) { return x&&/^[a-z0-9._-]{3,120}$/i.test(x.id)&&x.name&&x.name.length<=100&&Array.isArray(x.resources)&&Array.isArray(x.types); }
 function remoteURL(value) { let url; try { url=new URL(String(value||'').trim().replace(/^stremio:\/\//i,'https://')); } catch { throw new Error('Enter a complete HTTPS manifest URL'); } const host=url.hostname.toLowerCase(); if(url.protocol!=='https:'||url.username||url.password||url.href.length>8192||!host||host==='localhost'||host.endsWith('.localhost')||host.endsWith('.local')||/^[\d.:[\]]+$/.test(host)||/(^|\.)(internal|localdomain)(\.|$)/.test(host)) throw new Error('Only public HTTPS add-on URLs are allowed'); return url; }
-async function remoteJSON(start,label='Add-on request failed',maxBytes=4*1024*1024) { let url=remoteURL(start); for(let n=0;n<=3;n++){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),15000);let response;try{response=await fetch(url,{headers:{Accept:'application/json','User-Agent':'TShow/1.3 (metadata only)'},redirect:'manual',signal:controller.signal});}catch{throw new Error(label+': request failed');}finally{clearTimeout(timer);}if(response.status>=300&&response.status<400){if(n===3||!response.headers.get('location'))throw new Error(label+': too many redirects');url=remoteURL(new URL(response.headers.get('location'),url).href);continue;}if(!response.ok)throw new Error(label+': provider returned '+response.status);if(Number(response.headers.get('content-length')||0)>maxBytes)throw new Error(label+': response is too large');const text=await response.text();if(text.length>maxBytes)throw new Error(label+': response is too large');try{return {data:JSON.parse(text),finalURL:url.href};}catch{throw new Error(label+': provider did not return JSON');}} }
+async function remoteJSON(start,label='Add-on request failed',maxBytes=4*1024*1024) {
+  let url=remoteURL(start);
+  for(let redirectCount=0;redirectCount<=3;redirectCount++){
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),15000);
+    let response;
+    try{
+      response=await fetch(url,{
+        headers:{Accept:'application/json, text/plain, */*'},
+        redirect:'manual',
+        signal:controller.signal
+      });
+      if(response.status===403){
+        response.body?.cancel();
+        response=await fetch(url,{
+          headers:{
+            Accept:'application/json, text/plain, */*',
+            'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0 Safari/537.36'
+          },
+          redirect:'manual',
+          signal:controller.signal
+        });
+      }
+    }catch{
+      throw new Error(label+': request failed');
+    }finally{
+      clearTimeout(timer);
+    }
+    if(response.status>=300&&response.status<400){
+      if(redirectCount===3||!response.headers.get('location'))throw new Error(label+': too many redirects');
+      url=remoteURL(new URL(response.headers.get('location'),url).href);
+      continue;
+    }
+    if(response.status===403)throw new Error(label+': this provider blocks Cloudflare web requests (403)');
+    if(!response.ok)throw new Error(label+': provider returned '+response.status);
+    if(Number(response.headers.get('content-length')||0)>maxBytes)throw new Error(label+': response is too large');
+    const text=await response.text();
+    if(text.length>maxBytes)throw new Error(label+': response is too large');
+    try{return {data:JSON.parse(text),finalURL:url.href};}
+    catch{throw new Error(label+': provider did not return JSON');}
+  }
+}
 function resourceURL(manifestURL,resource,type,id,extra={}) { const url=remoteURL(manifestURL);url.hash='';url.search='';url.pathname=url.pathname.replace(/\/manifest\.json\/?$/i,'');const base=`${url.pathname.replace(/\/$/,'')}/${encodeURIComponent(resource)}/${encodeURIComponent(type)}/${encodeURIComponent(id)}`;const args=Object.entries(extra).filter(([,v])=>v!=null&&String(v).length<=300).map(([k,v])=>`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&');url.pathname=resource==='catalog'&&args?`${base}/${args}.json`:`${base}.json`;return url.href; }
 async function contextAddons(request) { const results=await Promise.all(customURLs(request).map(async manifestURL=>{try{const r=await remoteJSON(manifestURL,'Could not fetch the manifest',1024*1024);if(!validManifest(r.data)||BUILT_INS.some(x=>x.id===r.data.id))return null;return normalizeManifest({...r.data,manifestURL:r.finalURL},{custom:true});}catch{return null;}}));return [...BUILT_INS,...results.filter(Boolean)]; }
 function addonFor(addons,id) { return addons.find(x=>x.id===id); }
