@@ -46,13 +46,14 @@ npm test
 ## Cloudflare deployment
 
 The production-ready Cloudflare Worker configuration is included in `wrangler.jsonc`.
-Cloudflare serves the PWA, static assets, movie metadata, provider availability, and
-safe add-on JSON routes from its global network. No Render service is required at runtime.
+Cloudflare serves the PWA and all static assets from its global network. Requests under
+`/api/*` are forwarded to the live TShow Render service, which remains the API backend
+and rollback while the server-only routes are migrated gradually.
 
 Public movie metadata is cached briefly at the edge. Search queries, browser add-ons,
 streams, contact messages, cookies, authorization headers, and every modifying request
-are deliberately excluded from shared caching. Browser-installed add-on URLs stay in
-that browser's local storage and are sent only with that visitor's request when needed.
+are deliberately excluded from shared caching. The browser add-on identifier continues
+to pass only to the Render API, so each visitor keeps their own add-ons.
 
 For a repository connected through Cloudflare Workers Builds:
 
@@ -71,12 +72,9 @@ pnpm run cf:check
 pnpm run cf:deploy
 ```
 
-Set `TMDB_API_KEY` as a Cloudflare Worker secret before production deployment. It is not
-placed in `wrangler.jsonc` or sent to browsers:
-
-```powershell
-pnpm exec wrangler secret put TMDB_API_KEY
-```
+`API_ORIGIN` is intentionally fixed to `https://tshow.onrender.com`. Do not point it at
+the Cloudflare site itself, because that would create a proxy loop. Keep the Render
+service active until all Node-only API routes have been replaced.
 
 ## Optional TMDB catalog
 
@@ -96,7 +94,7 @@ https://your-provider.example/manifest.json
 
 Standard `stremio://host/path/manifest.json` install links are also accepted and are safely normalized to HTTPS. TShow validates every redirect destination and blocks private-network targets by default.
 
-Installed manifest URLs are saved in that browser's local storage and restored automatically after a refresh or deployment. They are not kept in a TShow database, so a different browser or device cannot list, use, or remove them. This is anonymous browser-level storage, not account synchronization; clearing site data removes the saved list.
+Installed manifest URLs are saved in that browser's local storage and restored automatically after a refresh, redeploy, or Render cold start. They are isolated by a random browser identifier, so a different browser or device cannot list, use, or remove them. This is anonymous browser-level storage, not account synchronization; clearing site data removes the saved list.
 
 Search providers are separate from playback providers. Official Cinemeta movie/series search and TVmaze series search are permanent protected providers. Search also queries any browser-installed add-on that explicitly declares a search catalog. A slow or unavailable provider is skipped without hiding results returned by the others.
 
