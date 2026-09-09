@@ -105,8 +105,21 @@
         if (browsePath === '/series') showBrowseView('tv');
         if (['home', 'explore', 'list', 'calendar', 'history', 'addons', 'settings', 'help'].includes(requestedView)) setView(requestedView);
         const requestedTitle = new URLSearchParams(window.location.search).get('title');
-        const titleMatch = String(requestedTitle || '').match(/^(movie|tv):(\d{1,12})$/);
-        if (titleMatch) openDetails({ id: Number(titleMatch[2]), media_type: titleMatch[1] });
+        const titleMatch = String(requestedTitle || '').match(/^(movie|tv):(\d{1,12}|tt\d{5,12})$/i);
+        if (titleMatch) {
+            const titleType = titleMatch[1].toLowerCase();
+            const titleId = titleMatch[2];
+            openDetails(/^tt/i.test(titleId) ? {
+                id: titleId,
+                imdb_id: titleId,
+                media_type: titleType,
+                _stremioId: titleId,
+                _stremioType: titleType === 'tv' ? 'series' : 'movie',
+                _sourceAddonId: 'org.streamflix.cinemeta',
+                _sourceAddonName: 'Cinemeta Search & Metadata',
+                _addonCatalog: true
+            } : { id: Number(titleId), media_type: titleType });
+        }
     }
 
     function cacheElements() {

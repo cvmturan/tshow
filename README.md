@@ -46,14 +46,15 @@ npm test
 ## Cloudflare deployment
 
 The production-ready Cloudflare Worker configuration is included in `wrangler.jsonc`.
-Cloudflare serves the PWA and all static assets from its global network. Requests under
-`/api/*` are forwarded to the live TShow Render service, which remains the API backend
-and rollback while the server-only routes are migrated gradually.
+Cloudflare serves the PWA, static assets, metadata routes, add-on JSON requests, search,
+catalogs, and stream descriptions from its global network. Production has no Render
+runtime dependency.
 
 Public movie metadata is cached briefly at the edge. Search queries, browser add-ons,
 streams, contact messages, cookies, authorization headers, and every modifying request
-are deliberately excluded from shared caching. The browser add-on identifier continues
-to pass only to the Render API, so each visitor keeps their own add-ons.
+are deliberately excluded from shared caching. Saved add-on manifest URLs stay in the
+visitor's browser and are attached only to that visitor's API requests. TShow does not
+put them in a shared database or expose them to other visitors.
 
 For a repository connected through Cloudflare Workers Builds:
 
@@ -72,9 +73,14 @@ pnpm run cf:check
 pnpm run cf:deploy
 ```
 
-`API_ORIGIN` is intentionally fixed to `https://tshow.onrender.com`. Do not point it at
-the Cloudflare site itself, because that would create a proxy loop. Keep the Render
-service active until all Node-only API routes have been replaced.
+`TMDB_API_KEY` can be added as an optional encrypted Cloudflare Worker secret. Without
+it, permanent Cinemeta and TVmaze discovery/search continue working; TMDB-specific
+provider and metadata routes report that the optional service is unavailable.
+
+Legacy `/api/proxy`, `/api/transcode`, and `/api/debrid` routes return HTTP 410. Cloudflare
+never downloads, caches, proxies, or converts media. Compatible HTTPS MP4, WebM, and HLS
+sources go directly from their provider to the browser. Other lawful sources can be
+opened in a locally installed TShow Player, VLC, Outplayer, or another compatible app.
 
 ## Optional TMDB catalog
 
@@ -94,11 +100,11 @@ https://your-provider.example/manifest.json
 
 Standard `stremio://host/path/manifest.json` install links are also accepted and are safely normalized to HTTPS. TShow validates every redirect destination and blocks private-network targets by default.
 
-Installed manifest URLs are saved in that browser's local storage and restored automatically after a refresh, redeploy, or Render cold start. They are isolated by a random browser identifier, so a different browser or device cannot list, use, or remove them. This is anonymous browser-level storage, not account synchronization; clearing site data removes the saved list.
+Installed manifest URLs are saved in that browser's local storage and restored automatically after a refresh or redeploy. Each request carries only that browser's list; a different browser or device cannot list, use, or remove it. This is anonymous browser-level storage, not account synchronization; clearing site data removes the saved list.
 
 Search providers are separate from playback providers. Official Cinemeta movie/series search and TVmaze series search are permanent protected providers. Search also queries any browser-installed add-on that explicitly declares a search catalog. A slow or unavailable provider is skipped without hiding results returned by the others.
 
-Catalog add-ons create home-screen rows. Stream-only add-ons appear when **Play** checks a title, but do not add movie rows by themselves. Sources from a user-installed add-on are external-only: safe HTTP/HTTPS links can be opened in VLC or Outplayer or copied, valid BitTorrent info hashes can be handed to a compatible app, and provider pages open separately. TShow does not proxy, download, cache, transcode, or subtitle-relay content from a user-installed add-on. It still fetches that add-on's manifest and catalog, metadata, and stream-description JSON so the interface can list its results.
+Catalog add-ons create home-screen rows. Stream-only add-ons appear when **Play** checks a title, but do not add movie rows by themselves. Sources from a user-installed add-on are classified by capability: compatible public HTTPS MP4, WebM, and HLS links may play directly in the browser, other safe links can be opened in a local player or copied, valid BitTorrent info hashes can be handed to a compatible app, and provider pages open separately. TShow does not proxy, download, cache, transcode, or subtitle-relay content. It fetches only the add-on manifest and catalog, metadata, subtitle-description, and stream-description JSON needed to display choices.
 
 Built-in lawful player sources and official trailers can still play in the browser. Unsafe protocols, local-network destinations, and malformed source-app links remain blocked. The Terms, Privacy Policy, Copyright Policy, legal notice, and provider credits are published at `/legal.html`.
 
