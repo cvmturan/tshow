@@ -101,6 +101,30 @@ test('installed add-ons are supplied per browser request and never globally stor
   assert.equal(manifestCalls, 1);
 });
 
+test('a browser-cached validated manifest survives a temporary provider outage', async (t) => {
+  const originalFetch = globalThis.fetch;
+  const manifestURL = 'https://sometimes-offline.example/manifest.json';
+  let remoteCalls = 0;
+  globalThis.fetch = async () => {
+    remoteCalls += 1;
+    return new Response('Forbidden', { status: 403 });
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  const cachedManifest = {
+    id: 'com.example.saved', name: 'Saved provider', version: '1.0.0',
+    resources: ['stream'], types: ['movie'], manifestURL
+  };
+  const response = await worker.fetch(new Request('https://showt.fun/api/addons', {
+    headers: {
+      'X-TShow-Addon-Urls': addonHeader([{ manifestURL, manifest: cachedManifest }])
+    }
+  }), env(), createContext());
+  const body = await response.json();
+  assert.ok(body.addons.some((addon) => addon.id === 'com.example.saved' && addon.isCustom));
+  assert.equal(remoteCalls, 0);
+});
+
 test('direct compatible video is returned unchanged and never fetched by TShow', async (t) => {
   const originalFetch = globalThis.fetch;
   const manifestURL = 'https://legal-addon.example/manifest.json';
