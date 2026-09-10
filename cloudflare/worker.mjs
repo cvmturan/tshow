@@ -14,6 +14,22 @@ const BUILT_INS = [
 ].map(normalizeManifest);
 
 function json(value,status=200,headers={}) { return Response.json(value,{status,headers:{...SECURITY,...headers}}); }
+async function browserResult(request, env) {
+  if (request.method !== 'POST' || request.headers.get('origin') !== (env.APP_ORIGIN || 'https://showt.fun') || request.headers.get('x-tshow-request') !== '1') return error('Invalid request origin', 403);
+  try {
+    const body = JSON.parse(await readBody(request, 1024 * 1024));
+    const manifestURL = remoteURL(body.manifestURL).href;
+    if (!validManifest(body.manifest) || BUILT_INS.some(a => a.id === body.manifest.id)) return error('Invalid custom manifest');
+    const manifest = normalizeManifest({ ...body.manifest, manifestURL }, { custom: true });
+    if (body.resource === 'manifest') return json({ success: true, manifest });
+    if (body.resource === 'stream') {
+      const raw = Array.isArray(body.data?.streams) ? body.data.streams.slice(0, 100) : [];
+      const streams = raw.map((s, i) => streamShape(s, manifest, i)).filter(Boolean).map(({_index, ...s}) => s);
+      return json({ streams, source: { addonId: manifest.id, addonName: manifest.name, returned: raw.length, actionable: streams.length, unsupported: raw.length - streams.length, connection: 'browser' } });
+    }
+    return error('Unsupported browser resource');
+  } catch { return error('Could not validate the browser add-on response', 400); }
+}
 function error(message,status=400) { return json({error:message},status); }
 function b64decode(value) { try { return new TextDecoder().decode(Uint8Array.from(atob(String(value).replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0))); } catch { return ''; } }
 function customEntries(request) { const raw=request.headers.get('x-tshow-addon-urls')||''; if(!raw||raw.length>MAX_URLS_HEADER)return []; try { const values=JSON.parse(b64decode(raw));if(!Array.isArray(values))return [];const seen=new Set(),entries=[];for(const value of values){const manifestURL=typeof value==='string'?value:value?.manifestURL;if(typeof manifestURL!=='string'||manifestURL.length>8192||seen.has(manifestURL))continue;seen.add(manifestURL);entries.push({manifestURL,manifest:value?.manifest});if(entries.length===MAX_ADDONS)break;}return entries;} catch { return []; } }
@@ -148,5 +164,5 @@ async function apiRoute(request,env) { const url=new URL(request.url),p=url.path
    return json({subtitles:groups.flatMap(g=>g.subtitles).slice(0,120),providers:groups.map(({subtitles,...g})=>g)});
  }
  if(p.startsWith('/api/streams/')){const[,,,type,encodedId]=p.split('/');let id;try{id=decodeURIComponent(encodedId||'');}catch{return error('Invalid media id');}if(!['movie','series','tv'].includes(type)||!id)return error('Invalid media id');const addons=await contextAddons(request),selected=(url.searchParams.get('addonIds')||'').split(',').filter(Boolean),usable=addons.filter(a=>(!selected.length||selected.includes(a.id))&&a.resources.includes('stream')&&(!a.types.length||a.types.includes(type==='tv'?'series':type))&&(!a.idPrefixes.length||a.idPrefixes.some(x=>id.startsWith(x))));const sources=await Promise.all(usable.slice(0,20).map(async a=>{try{const raw=(await addonResource(addons,a.id,'stream',type==='tv'?'series':type,id)).streams||[],streams=raw.map((s,i)=>streamShape(s,a,i)).filter(Boolean).slice(0,100);return {addonId:a.id,addonName:a.name,streams,returned:raw.length,actionable:streams.length,unsupported:Math.max(0,raw.length-streams.length)};}catch(e){return {addonId:a.id,addonName:a.name,streams:[],returned:0,actionable:0,unsupported:0,error:e.message};}})),streams=sources.flatMap(x=>x.streams).sort((a,b)=>Number(b.browserReady)-Number(a.browserReady)||String(a.name).localeCompare(String(b.name))).map(({_index,...x})=>x);return json({streams,sources:sources.map(({streams,...x})=>x),count:streams.length});}return error('API route not found',404); }
-export default { async scheduled(_event,env,ctx) { ctx.waitUntil(cleanAccounts(env)); }, async fetch(request,env,ctx) { const url=new URL(request.url);if(url.hostname==='www.showt.fun'){url.hostname='showt.fun';return Response.redirect(url.href,308);}if(url.pathname.startsWith('/api/auth/')||url.pathname.startsWith('/api/account'))return accountRoute(request,env);if(url.pathname==='/api'||url.pathname.startsWith('/api/'))return cached(request,ctx,()=>apiRoute(request,env));const title=url.pathname.match(/^\/(movie|series)\/(\d{1,12}|tt\d{5,12})(?:\/[^/]*)?\/?$/i);if(title){const target=new URL('/',url);target.searchParams.set('title',`${title[1].toLowerCase()==='series'?'tv':'movie'}:${title[2]}`);return new Response(null,{status:302,headers:{Location:target.href,...SECURITY}});}return security(await env.ASSETS.fetch(request),url); } };
+export default { async scheduled(_event,env,ctx) { ctx.waitUntil(cleanAccounts(env)); }, async fetch(request,env,ctx) { const url=new URL(request.url);if(url.hostname==='www.showt.fun'){url.hostname='showt.fun';return Response.redirect(url.href,308);}if(url.pathname==='/api/addons/browser-result')return browserResult(request,env);if(url.pathname.startsWith('/api/auth/')||url.pathname.startsWith('/api/account'))return accountRoute(request,env);if(url.pathname==='/api'||url.pathname.startsWith('/api/'))return cached(request,ctx,()=>apiRoute(request,env));const title=url.pathname.match(/^\/(movie|series)\/(\d{1,12}|tt\d{5,12})(?:\/[^/]*)?\/?$/i);if(title){const target=new URL('/',url);target.searchParams.set('title',`${title[1].toLowerCase()==='series'?'tv':'movie'}:${title[2]}`);return new Response(null,{status:302,headers:{Location:target.href,...SECURITY}});}return security(await env.ASSETS.fetch(request),url); } };
 

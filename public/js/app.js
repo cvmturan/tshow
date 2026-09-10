@@ -88,7 +88,7 @@
         browseType: null,
         browseItems: [],
         browseNextPage: 3,
-        browseNextSkip: 300,
+        browseNextSkip: 100,
         browseLoading: false,
         browseExhausted: false,
         browseEmptyPages: 0,
@@ -111,6 +111,33 @@
         updateClock();
         window.setInterval(updateClock, 30_000);
         registerPWA();
+        const installRailControls = () => document.querySelectorAll('.media-rail').forEach(rail => {
+            if (rail.dataset.controlsReady) return;
+            rail.dataset.controlsReady = 'true';
+            const controls = makeElement('div', 'rail-controls');
+            const label = rail.closest('section')?.querySelector('h2, h3')?.textContent || 'Titles';
+            for (const [direction, symbol] of [[-1, '‹'], [1, '›']]) {
+                const button = makeElement('button', 'rail-arrow', symbol);
+                button.type = 'button';
+                button.setAttribute('aria-label', label + (direction < 0 ? ': previous titles' : ': next titles'));
+                button.addEventListener('click', () => rail.scrollBy({ left: direction * Math.max(160, rail.clientWidth * .85), behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' }));
+                controls.append(button);
+            }
+            rail.before(controls);
+            const update = () => {
+                controls.children[0].disabled = rail.scrollLeft < 2;
+                controls.children[1].disabled = rail.scrollLeft + rail.clientWidth >= rail.scrollWidth - 2;
+                controls.hidden = rail.scrollWidth <= rail.clientWidth + 2;
+            };
+            rail.addEventListener('scroll', update, { passive: true });
+            new ResizeObserver(update).observe(rail);
+            new MutationObserver(update).observe(rail, { childList: true });
+            update();
+        });
+        installRailControls();
+        new MutationObserver(installRailControls).observe(document.getElementById('main-content'), { childList: true, subtree: true });
+        const addonNotice = document.getElementById('addon-account-notice');
+        if (addonNotice) addonNotice.hidden = Boolean(window.TShowAccount?.user);
 
         await Promise.all([
             loadHome(),
@@ -634,7 +661,7 @@
                 selected.push(item);
                 if (selected.length === limit) break;
             }
-            return selected;
+            return selected.length ? selected : uniqueMedia(items).slice(0, limit);
         };
 
         return {
@@ -1757,7 +1784,7 @@
         elements.openInDesktop.hidden = !desktopAvailable;
         elements.openInDesktop.disabled = !desktopAvailable;
         elements.openInVlc.hidden = !playerAvailable;
-        elements.openInOutplayer.hidden = !playerAvailable;
+        elements.openInOutplayer.hidden = !playerAvailable || !/iPhone|iPad|iPod/i.test(navigator.userAgent);
         elements.openInVlc.disabled = !playerAvailable;
         elements.openInOutplayer.disabled = !playerAvailable;
         elements.openInSourceApp.hidden = !appAvailable;
@@ -1790,7 +1817,18 @@
     function openActiveStreamInVlc() {
         const url = activeExternalPlayerURL();
         if (!url) return showToast('This source has no direct external-player link.', 'warning');
-        window.location.href = `vlc://${url}`;
+        if (!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+            const blob = new Blob(['#EXTM3U\n' + url.replace(/[\r\n]/g, '') + '\n'], { type: 'audio/x-mpegurl' });
+            const playlist = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = playlist; link.download = 'TShow-play-in-VLC.m3u'; link.click();
+            setTimeout(() => URL.revokeObjectURL(playlist), 30000);
+            showToast('Playlist downloaded. Open it with VLC. Or choose Copy link, then VLC → Media → Open Network Stream (Ctrl+N).', 'info');
+            return;
+        }
+        window.location.href = /Android/i.test(navigator.userAgent)
+            ? 'intent:' + url.slice(url.indexOf(':') + 1) + '#Intent;scheme=' + new URL(url).protocol.replace(':', '') + ';package=org.videolan.vlc;end'
+            : 'vlc-x-callback://x-callback-url/stream?url=' + encodeURIComponent(url);
         setTimeout(() => {
             showToast('If VLC did not open, install VLC or try Outplayer.', 'info');
         }, 800);
@@ -2435,7 +2473,7 @@
         state.browseType = type;
         state.browseItems = items;
         state.browseNextPage = 3;
-        state.browseNextSkip = 300;
+        state.browseNextSkip = 100;
         state.browseLoading = false;
         state.browseExhausted = false;
         state.browseEmptyPages = 0;

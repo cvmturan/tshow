@@ -23,6 +23,19 @@ function addonHeader(urls) {
   return Buffer.from(JSON.stringify(urls)).toString('base64url');
 }
 
+test('browser fallback normalizes sources without fetching provider data', async () => {
+  const request = new Request('https://showt.fun/api/addons/browser-result', {
+    method: 'POST', headers: { Origin: 'https://showt.fun', 'X-TShow-Request': '1', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ manifestURL: 'https://provider.example/manifest.json', manifest: { id: 'com.example.browser', name: 'Browser provider', resources: ['stream'], types: ['series'] }, resource: 'stream', data: { streams: [{ url: 'https://media.example/episode.mp4', behaviorHints: { videoSize: 1073741824 } }, { url: 'javascript:alert(1)' }] } })
+  });
+  const response = await worker.fetch(request, env(), createContext());
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.streams.length, 1);
+  assert.equal(body.streams[0].sizeLabel, '1.0 GB');
+  assert.equal(body.source.connection, 'browser');
+});
+
 test('only public metadata endpoints qualify for edge caching', () => {
   assert.equal(cacheTTL(new Request('https://tshow.example/api/tmdb/popular/movies')), 900);
   assert.equal(cacheTTL(new Request('https://tshow.example/api/addons/catalog/org.cvmturan.discovery/series/top')), 14400);

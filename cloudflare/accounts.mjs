@@ -55,9 +55,32 @@ async function limit(db, request, scope, max = 20) {
 async function userFor(request, db) {
   const token = readCookie(request, COOKIE);
   if (!/^[\w-]{43}$/.test(token)) return null;
-  return db.prepare('SELECT u.id,u.email,u.name,u.created_at,u.password_hash FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').bind(await digest(token), now()).first();
+  return db.prepare('SELECT u.id,u.email,u.name,u.created_at,u.password_hash,p.username,p.verified_at FROM sessions s JOIN users u ON u.id=s.user_id LEFT JOIN account_profiles p ON p.user_id=u.id WHERE s.token_hash=? AND s.expires_at>?').bind(await digest(token), now()).first();
 }
-const publicUser = u => u ? { id: u.id, email: u.email, name: u.name, createdAt: u.created_at, hasPassword: Boolean(u.password_hash) } : null;
+const publicUser = u => u ? { id: u.id, email: u.email, name: u.name, username: u.username || null, emailVerified: Boolean(u.verified_at), createdAt: u.created_at, hasPassword: Boolean(u.password_hash) } : null;
+function username(value) {
+  const name = String(value || '').trim().toLowerCase();
+  if (!/^[a-z0-9_]{3,24}$/.test(name)) fail('Use 3–24 letters, numbers or underscores for your username.');
+  return name;
+}
+const emailReady = env => Boolean(env.RESEND_API_KEY && env.MAIL_FROM);
+async function sendVerification(env, user) {
+  if (!emailReady(env)) fail('Email delivery is not connected yet. You can keep using your account and verify later.', 503);
+  const token = random(), hash = await digest(token);
+  await env.DB.prepare('INSERT INTO email_tokens(token_hash,user_id,purpose,expires_at) VALUES (?,?,?,?)').bind(hash, user.id, 'verify', now() + 1800).run();
+  const link = `${env.APP_ORIGIN || 'https://showt.fun'}/?account=verify#verify=${token}`;
+  try {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(10000),
+      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'User-Agent': 'TShow/1.0', 'Idempotency-Key': hash },
+      body: JSON.stringify({ from: env.MAIL_FROM, to: [user.email], subject: 'Verify your TShow email', text: `Confirm your email address by opening this link within 30 minutes:\n\n${link}\n\nVerification is optional. If you did not request this message, you can ignore it.` })
+    });
+    if (!r.ok) throw new Error('Delivery failed');
+  } catch {
+    await env.DB.prepare('DELETE FROM email_tokens WHERE token_hash=?').bind(hash).run();
+    fail('The verification email could not be sent. Your account still works; please try later.', 502);
+  }
+}
 async function session(db, user, data = {}) {
   const token = random(), age = 60 * 60 * 24 * 30;
   await db.prepare('INSERT INTO sessions(token_hash,user_id,expires_at,created_at) VALUES (?,?,?,?)').bind(await digest(token), user.id, now() + age, now()).run();
@@ -145,7 +168,7 @@ async function oauth(request, env, provider, action) {
 export async function accountRoute(request, env) {
   const url = new URL(request.url), p = url.pathname, method = request.method;
   try {
-    if (p === '/api/auth/config') return reply({ available: Boolean(env.DB), google: Boolean(providerConfig(env, 'google')), apple: Boolean(providerConfig(env, 'apple')) });
+    if (p === '/api/auth/config') return reply({ available: Boolean(env.DB), emailVerification: emailReady(env), google: Boolean(providerConfig(env, 'google')), apple: Boolean(providerConfig(env, 'apple')) });
     if (!env.DB) fail('Accounts are not configured on this host yet.', 503);
     const db = env.DB;
     const oauthRoute = p.match(/^\/api\/auth\/(google|apple)\/(start|callback)$/);
@@ -159,16 +182,24 @@ export async function accountRoute(request, env) {
       await limit(db, request, 'register', 5);
       const data = await bodyJSON(request), address = email(data.email), pass = password(data.password, true);
       const name = String(data.name || '').trim().slice(0, 80); if (!name) fail('Enter your name.');
+      const handle = data.username ? username(data.username) : null;
+      if (handle && await db.prepare('SELECT user_id FROM account_profiles WHERE username=?').bind(handle).first()) fail('This username is already taken.', 409);
       if (await db.prepare('SELECT id FROM users WHERE email=?').bind(address).first()) fail('This email cannot be registered. Try signing in or recovering your account.', 409);
       const recoveryCode = random(), hashed = await hashPassword(pass);
       const user = { id: crypto.randomUUID(), email: address, name, created_at: now(), password_hash: hashed };
-      await db.prepare('INSERT INTO users(id,email,name,password_hash,recovery_hash,created_at) VALUES (?,?,?,?,?,?)').bind(user.id, address, name, hashed, await digest(recoveryCode), user.created_at).run();
+      await db.batch([
+        db.prepare('INSERT INTO users(id,email,name,password_hash,recovery_hash,created_at) VALUES (?,?,?,?,?,?)').bind(user.id, address, name, hashed, await digest(recoveryCode), user.created_at),
+        db.prepare('INSERT INTO account_profiles(user_id,username) VALUES (?,?)').bind(user.id, handle)
+      ]);
+      user.username = handle;
       return await session(db, user, { recoveryCode });
     }
     if (p === '/api/auth/login' && method === 'POST') {
       await limit(db, request, 'login');
-      const data = await bodyJSON(request), address = email(data.email), pass = password(data.password);
-      const user = await db.prepare('SELECT * FROM users WHERE email=?').bind(address).first();
+      const data = await bodyJSON(request), identifier = String(data.email || '').trim().toLowerCase(), pass = password(data.password);
+      const user = identifier.includes('@')
+        ? await db.prepare('SELECT u.*,p.username,p.verified_at FROM users u LEFT JOIN account_profiles p ON p.user_id=u.id WHERE u.email=?').bind(email(identifier)).first()
+        : await db.prepare('SELECT u.*,p.username,p.verified_at FROM users u JOIN account_profiles p ON p.user_id=u.id WHERE p.username=?').bind(username(identifier)).first();
       if (!await verifyPassword(pass, user?.password_hash)) fail('Email or password is incorrect.', 401);
       return await session(db, user);
     }
@@ -188,6 +219,30 @@ export async function accountRoute(request, env) {
     const user = await userFor(request, db);
     if (p === '/api/auth/me' && method === 'GET') return reply({ user: publicUser(user) });
     if (!user) fail('Sign in to continue.', 401);
+    if (p === '/api/account/profile' && method === 'PUT') {
+      await limit(db, request, 'profile', 20);
+      const data = await bodyJSON(request), handle = username(data.username);
+      const taken = await db.prepare('SELECT user_id FROM account_profiles WHERE username=?').bind(handle).first();
+      if (taken && taken.user_id !== user.id) fail('This username is already taken.', 409);
+      await db.prepare('INSERT INTO account_profiles(user_id,username) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET username=excluded.username').bind(user.id, handle).run();
+      return reply({ user: publicUser({ ...user, username: handle }) });
+    }
+    if (p === '/api/account/email/send' && method === 'POST') {
+      await limit(db, request, 'verification', 5);
+      await limit(db, request, 'verification:' + user.id, 3);
+      if (user.verified_at) return reply({ verified: true });
+      await sendVerification(env, user);
+      return reply({ sent: true });
+    }
+    if (p === '/api/account/email/verify' && method === 'POST') {
+      await limit(db, request, 'verify-token', 20);
+      const data = await bodyJSON(request);
+      if (!/^[\w-]{43}$/.test(String(data.token || ''))) fail('Invalid verification link.');
+      const token = await db.prepare('DELETE FROM email_tokens WHERE token_hash=? AND user_id=? AND purpose=? AND expires_at>? RETURNING user_id').bind(await digest(data.token), user.id, 'verify', now()).first();
+      if (!token) fail('This link is expired or has already been used. Request another email.');
+      await db.prepare('INSERT INTO account_profiles(user_id,verified_at) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET verified_at=excluded.verified_at').bind(user.id, now()).run();
+      return reply({ verified: true });
+    }
     if (p === '/api/auth/logout' && method === 'POST') {
       await db.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await digest(readCookie(request, COOKIE))).run();
       return reply({ success: true }, 200, { 'Set-Cookie': cookie(COOKIE, '', 0) });
@@ -229,6 +284,6 @@ export async function accountRoute(request, env) {
 export async function cleanAccounts(env) {
   if (!env.DB) return;
   const time = now();
-  await env.DB.batch(['sessions', 'auth_limits', 'oauth_states'].map(table => env.DB.prepare(`DELETE FROM ${table} WHERE expires_at<?`).bind(time)));
+  await env.DB.batch(['sessions', 'auth_limits', 'oauth_states', 'email_tokens'].map(table => env.DB.prepare(`DELETE FROM ${table} WHERE expires_at<?`).bind(time)));
 }
 

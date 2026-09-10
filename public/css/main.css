@@ -3724,3 +3724,20 @@ body:not(.legal-page) {
     }
 }
 
+/* Full-width navigation and single-height catalog rows. */
+body:not(.legal-page) .site-header { grid-template-columns: auto auto minmax(80px, 1fr) auto; justify-content: stretch; padding-inline: clamp(10px, 2vw, 30px); }
+body:not(.legal-page) .site-header .menu-button { grid-column: 1; grid-row: 1; }
+body:not(.legal-page) .site-header .account-button { grid-column: 2; justify-self: start; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+body:not(.legal-page) .site-header .search-form { grid-column: 3; width: min(100%, 560px); justify-self: center; }
+body:not(.legal-page) .site-header .header-clock { grid-column: 4; justify-self: end; }
+.media-rail { overflow-y: hidden; grid-template-rows: auto; align-items: start; scrollbar-width: none; padding-block: 7px 14px; }
+.media-rail::-webkit-scrollbar { display: none; }
+.media-rail .media-card { align-self: start; }
+.rail-controls { display: flex; justify-content: flex-end; gap: 8px; margin: 0 0 8px; }
+.rail-controls[hidden] { display: none; }
+.rail-arrow { width: 36px; height: 34px; border: 1px solid var(--line); border-radius: 10px; color: var(--text); background: rgba(255,255,255,.07); font-size: 25px; cursor: pointer; }
+.rail-arrow:hover:not(:disabled) { background: rgba(87,230,210,.18); border-color: var(--aqua); }
+.rail-arrow:disabled { opacity: .3; cursor: default; }
+.addon-account-notice { padding: 14px; border: 1px solid rgba(87,230,210,.25); border-radius: 12px; background: rgba(87,230,210,.06); line-height: 1.6; }
+@media(max-width:560px) { body:not(.legal-page) .site-header { grid-template-columns: 34px auto minmax(55px,1fr) 68px; gap: 5px; } body:not(.legal-page) .site-header .account-button { max-width: 74px; } .site-header .search-form input { font-size: 11px; } }
+

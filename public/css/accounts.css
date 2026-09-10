@@ -47,4 +47,5 @@
     .account-button { min-height: 34px; padding: 7px 10px; font-size: 11px; }
     .account-dialog { padding: 20px; border-radius: 20px; }
 }
+.account-dialog input.account-copy-checkbox { width: auto; margin-right: 7px; }
 

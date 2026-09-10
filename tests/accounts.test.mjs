@@ -10,7 +10,7 @@ test('accounts: sessions, isolated storage, conflicts, recovery and deletion', a
  const mf=new Miniflare(convertV4MiniflareOptions({workers:[{name:'tshow',modules:await Promise.all(['worker.mjs','accounts.mjs'].map(async f=>({type:'ESModule',path:fileURLToPath(new URL('../cloudflare/'+f,import.meta.url)),contents:await readFile(new URL('../cloudflare/'+f,import.meta.url),'utf8')}))),d1Databases:['DB'],bindings:{APP_ORIGIN:'https://showt.fun'},compatibilityDate:'2026-09-04'}]}));
  t.after(()=>mf.dispose());
  const db=await mf.getD1Database('DB');
- const sql=await readFile(new URL('../cloudflare/migrations/0001_accounts.sql',import.meta.url),'utf8');
+ const sql=(await Promise.all(['0001_accounts.sql','0002_profiles.sql'].map(f=>readFile(new URL('../cloudflare/migrations/'+f,import.meta.url),'utf8')))).join('\n');
  for(const statement of sql.split(';').filter(s=>s.trim())) await db.prepare(statement).run();
  async function call(path,method='GET',data,cookie='',origin='https://showt.fun'){
   return mf.dispatchFetch('https://showt.fun'+path,{method,headers:{Origin:origin,'X-TShow-Request':'1','Content-Type':'application/json',Cookie:cookie},body:data===undefined?undefined:JSON.stringify(data)});
@@ -21,6 +21,17 @@ test('accounts: sessions, isolated storage, conflicts, recovery and deletion', a
  assert.equal((await call('/api/auth/register','POST',{name:'Test',email:'weak@example.com',password:'lowercase1!'})).status,400);
  const a=await register('alice@example.com'),b=await register('bob@example.com');
  assert.notEqual(a.user.id,b.user.id);assert.equal(a.recoveryCode.length,43);
+ assert.equal((await call('/api/account/profile','PUT',{username:'alice_viewer'},a.cookie)).status,200);
+ assert.equal((await call('/api/account/profile','PUT',{username:'ALICE_VIEWER'},b.cookie)).status,409);
+ assert.equal((await call('/api/auth/login','POST',{email:'alice_viewer',password:'GoodPass1!'})).status,200);
+ assert.equal((await call('/api/account/email/send','POST',{},a.cookie)).status,503);
+ const verification='v'.repeat(43);
+ const tokenHash=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verification))).toString('base64url');
+ await db.prepare('INSERT INTO email_tokens(token_hash,user_id,purpose,expires_at) VALUES (?,?,?,?)').bind(tokenHash,a.user.id,'verify',Math.floor(Date.now()/1000)+60).run();
+ assert.equal((await call('/api/account/email/verify','POST',{token:verification},b.cookie)).status,400);
+ assert.equal((await call('/api/account/email/verify','POST',{token:verification},a.cookie)).status,200);
+ assert.equal((await (await call('/api/auth/me','GET',undefined,a.cookie)).json()).user.emailVerified,true);
+ assert.equal((await call('/api/account/email/verify','POST',{token:verification},a.cookie)).status,400);
  const put=(cookie,version,value)=>call('/api/account/data/watchlist','PUT',{version,value},cookie);
  let r=await put(a.cookie,0,[{id:'tt1234567',title:'Test'}]);assert.equal(r.status,200);assert.equal((await r.json()).version,1);
  assert.deepEqual((await (await call('/api/account/data','GET',undefined,b.cookie)).json()).data,{});

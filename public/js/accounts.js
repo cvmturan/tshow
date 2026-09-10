@@ -73,6 +73,11 @@
             const creatingPassword = mode.value !== 'login';
             document.getElementById('account-name-field').hidden = mode.value !== 'register';
             form.elements.name.required = mode.value === 'register';
+            document.getElementById('account-username-field').hidden = mode.value !== 'register';
+            document.getElementById('account-save-guest-field').hidden = mode.value !== 'register';
+            form.elements.email.type = mode.value === 'login' ? 'text' : 'email';
+            form.elements.email.autocomplete = mode.value === 'login' ? 'username' : 'email';
+            document.getElementById('account-email-label').textContent = mode.value === 'login' ? 'Email or username' : 'Email';
             document.getElementById('account-recovery-field').hidden = mode.value !== 'recover';
             form.elements.recoveryCode.required = mode.value === 'recover';
             form.elements.password.autocomplete = mode.value === 'login' ? 'current-password' : 'new-password';
@@ -100,12 +105,20 @@
             event.preventDefault(); const button = document.getElementById('account-submit'); button.disabled = true; message.textContent = 'Please wait…';
             try {
                 const result = await request(`/api/auth/${mode.value}`, { method: 'POST', body: JSON.stringify(Object.fromEntries(new FormData(form))) });
+                if (mode.value === 'register' && form.elements.saveGuest.checked) {
+                    user = result.user;
+                    for (const key of Object.keys(names)) {
+                        const value = localStorage.getItem(names[key]);
+                        if (value !== null) save(keyFor(key), value);
+                    }
+                    await flush();
+                }
                 form.reset();
                 if (result.recoveryCode) {
                     document.getElementById('account-guest').hidden = true;
                     const panel = document.getElementById('account-recovery-created'); panel.hidden = false;
                     document.getElementById('account-new-code').textContent = result.recoveryCode;
-                    message.textContent = 'Save this recovery code somewhere safe. It is shown only once and replaces email password recovery.';
+                    message.textContent = 'Account created. You can verify your email later.';
                     document.getElementById('account-recovery-done').onclick = () => location.reload();
                 } else location.reload();
             } catch (e) { message.textContent = e.message; }
@@ -117,6 +130,35 @@
             finally { event.target.disabled = false; }
         });
         act('account-export', () => exportData(true));
+        document.getElementById('account-profile-form').elements.username.value = user?.username || '';
+        document.getElementById('account-profile-form').addEventListener('submit', async event => {
+            event.preventDefault();
+            const button = event.target.querySelector('button'); button.disabled = true;
+            try {
+                const result = await request('/api/account/profile', { method: 'PUT', body: JSON.stringify(Object.fromEntries(new FormData(event.target))) });
+                user = result.user; message.textContent = 'Username saved. You can use it to sign in.';
+            } catch (e) { message.textContent = e.message; }
+            finally { button.disabled = false; }
+        });
+        const verifyButton = document.getElementById('account-verify-email');
+        verifyButton.hidden = !user || user.emailVerified;
+        verifyButton.disabled = !config.emailVerification;
+        document.getElementById('account-email-status').textContent = user?.emailVerified ? 'Email verified' : config.emailVerification
+            ? 'Email not verified yet. You can verify whenever you are ready.'
+            : 'Email verification is optional. Email delivery is being set up; your account is ready to use.';
+        act('account-verify-email', async () => {
+            await request('/api/account/email/send', { method: 'POST', body: '{}' });
+            message.textContent = 'Verification email sent. Check your inbox and spam folder.';
+        });
+        const verification = new URLSearchParams(location.hash.slice(1)).get('verify');
+        if (verification && user) {
+            history.replaceState(null, '', location.pathname + location.search);
+            void request('/api/account/email/verify', { method: 'POST', body: JSON.stringify({ token: verification }) }).then(() => {
+                document.getElementById('account-email-status').textContent = 'Email verified';
+                verifyButton.hidden = true;
+                message.textContent = 'Your email is verified.';
+            }).catch(e => { message.textContent = e.message; });
+        } else if (verification) message.textContent = 'Sign in to the account that requested this verification email, then open the link again.';
         act('account-retry', async () => { if (blocked) throw new Error('Export unsaved changes first. Then choose “Use cloud copy”.'); await flush(); });
         act('account-use-cloud', async () => {
             await exportData(true);
