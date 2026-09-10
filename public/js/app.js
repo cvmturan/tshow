@@ -1,5 +1,6 @@
-(() => {
+(async () => {
     'use strict';
+    await window.TShowAccount?.ready;
 
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
@@ -10,6 +11,11 @@
         addonClientId: 'streamflix:addon-client:v1',
         region: 'tshow:region:v1'
     };
+
+    if (window.TShowAccount?.user) {
+        for (const key of Object.keys(STORAGE_KEYS)) STORAGE_KEYS[key] = window.TShowAccount.storageKey(key);
+    }
+    const saveStored = (key, value) => window.TShowAccount ? window.TShowAccount.save(key, value) : (value === null ? localStorage.removeItem(key) : localStorage.setItem(key, value));
 
     const addonClientId = loadOrCreateAddonClientId();
 
@@ -75,7 +81,8 @@
 
     const elements = {};
 
-    document.addEventListener('DOMContentLoaded', init);
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else void init();
 
     async function init() {
         cacheElements();
@@ -269,6 +276,7 @@
                 if (elements.videoPlayer.paused) elements.videoPlayer.play().catch(() => {});
                 else elements.videoPlayer.pause();
             }
+            if (['ArrowLeft','ArrowRight'].includes(event.key) && Number.isFinite(elements.videoPlayer.duration)) {event.preventDefault();elements.videoPlayer.currentTime=Math.max(0,Math.min(elements.videoPlayer.duration,elements.videoPlayer.currentTime+(event.key==='ArrowRight'?10:-10)));}
             if (event.key.toLocaleLowerCase() === 'm') elements.videoPlayer.muted = !elements.videoPlayer.muted;
             if (event.key.toLocaleLowerCase() === 'f' && document.fullscreenEnabled) {
                 document.fullscreenElement ? document.exitFullscreen() : elements.videoPlayer.requestFullscreen?.();
@@ -322,7 +330,7 @@
 
         elements.regionSelect.addEventListener('change', () => {
             state.region = elements.regionSelect.value;
-            localStorage.setItem(STORAGE_KEYS.region, state.region);
+            saveStored(STORAGE_KEYS.region, state.region);
             showToast(`Viewing region changed to ${elements.regionSelect.selectedOptions[0].textContent}.`);
         });
 
@@ -414,10 +422,11 @@
             }
         });
 
-        elements.videoPlayer.addEventListener('timeupdate', savePlaybackProgress);
+        elements.videoPlayer.addEventListener('timeupdate', () => savePlaybackProgress());
+        elements.videoPlayer.addEventListener('pause', () => savePlaybackProgress(true));
         elements.videoPlayer.addEventListener('ended', () => {
             if (state.playerMedia) {
-                localStorage.removeItem(STORAGE_KEYS.continueWatching);
+                saveStored(STORAGE_KEYS.continueWatching, null);
                 state.continueEntry = null;
                 renderContinueWatching();
             }
@@ -983,8 +992,8 @@
         );
         state.activeVideoId = defaultVideoId || null;
 
-        if (type === 'tv' && media._addonCatalog) {
-            const episodePicker = createEpisodePicker(details);
+        if (type === 'tv') {
+            const episodePicker = createEpisodePicker(details) || createCountedEpisodePicker(media, details);
             if (episodePicker) {
                 main.append(episodePicker);
             } else {
@@ -992,7 +1001,7 @@
                 main.append(makeElement(
                     'p',
                     'season-summary',
-                    'Episode metadata is not available from this catalog, so the player cannot choose a series episode yet.'
+                    'Episode metadata is unavailable for this series. Try another catalog result with an IMDb ID.'
                 ));
             }
         }
@@ -1001,7 +1010,7 @@
         const playButton = makeElement('button', 'button button-primary');
         playButton.type = 'button';
         playButton.append(makeElement('span', 'play-icon'), document.createTextNode('Watch options'));
-        playButton.disabled = type === 'tv' && media._addonCatalog && !state.activeVideoId;
+        playButton.disabled = type === 'tv' && !state.activeVideoId;
         playButton.addEventListener('click', () => playMedia(media, details, state.activeVideoId));
 
         const trailerButton = makeElement('button', 'button button-secondary', 'Watch trailer');
@@ -1213,6 +1222,60 @@
         return picker;
     }
 
+    function createCountedEpisodePicker(media, details) {
+        const imdbId = String(
+            details?.external_ids?.imdb_id || details?.imdb_id || media?.imdb_id || media?._stremioId || ''
+        );
+        if (!/^tt\d{5,12}$/i.test(imdbId)) return null;
+        const seasons = (Array.isArray(details?.seasons) ? details.seasons : [])
+            .map((season) => ({
+                number: Number(season?.season_number),
+                count: Math.min(200, Number(season?.episode_count) || 0),
+                name: String(season?.name || '')
+            }))
+            .filter((season) => Number.isInteger(season.number) && season.number >= 0 && season.count > 0)
+            .sort((left, right) => left.number - right.number);
+        if (!seasons.length) return null;
+
+        const picker = makeElement('div', 'episode-picker');
+        picker.append(makeElement('p', 'episode-picker-title', 'Choose an episode'));
+        const grid = makeElement('div', 'episode-picker-grid');
+        const seasonLabel = makeElement('label', '', 'Season');
+        const episodeLabel = makeElement('label', '', 'Episode');
+        const seasonSelect = document.createElement('select');
+        const episodeSelect = document.createElement('select');
+        for (const season of seasons) {
+            seasonSelect.append(makeOption(
+                String(season.number),
+                season.number === 0 ? 'Specials' : season.name || `Season ${season.number}`
+            ));
+        }
+        const firstRegular = seasons.find((season) => season.number > 0) || seasons[0];
+        seasonSelect.value = String(firstRegular.number);
+
+        function renderEpisodes(preferred = 1) {
+            const season = seasons.find((item) => item.number === Number(seasonSelect.value));
+            if (!season) return;
+            episodeSelect.replaceChildren(...Array.from({ length: season.count }, (_, index) => {
+                const episode = index + 1;
+                return makeOption(`${imdbId}:${season.number}:${episode}`, `Episode ${episode}`);
+            }));
+            episodeSelect.selectedIndex = Math.max(0, Math.min(season.count - 1, preferred - 1));
+            state.activeVideoId = episodeSelect.value || null;
+        }
+        renderEpisodes();
+        seasonSelect.addEventListener('change', () => renderEpisodes());
+        episodeSelect.addEventListener('change', () => { state.activeVideoId = episodeSelect.value || null; });
+        seasonLabel.append(seasonSelect);
+        episodeLabel.append(episodeSelect);
+        grid.append(seasonLabel, episodeLabel);
+        picker.append(
+            grid,
+            makeElement('p', 'episode-picker-note', 'TShow sends the selected season and episode to compatible add-ons.')
+        );
+        return picker;
+    }
+
     function openTrailer(media, details) {
         const videos = details?.videos?.results;
         const tmdbTrailer = Array.isArray(videos)
@@ -1301,10 +1364,11 @@
             const streamId = requestedVideoId ||
                 state.activeVideoId ||
                 resolvedDetails.behaviorHints?.defaultVideoId ||
+                resolvedDetails.external_ids?.imdb_id ||
                 resolvedDetails.imdb_id ||
                 media._stremioId ||
                 media.id;
-            if (streamType === 'series' && media._addonCatalog && !requestedVideoId && !state.activeVideoId) {
+            if (streamType === 'series' && !requestedVideoId && !state.activeVideoId) {
                 throw new Error('Choose a series episode before opening the player.');
             }
             const result = await api(`/api/streams/${streamType}/${encodeURIComponent(streamId)}`);
@@ -1761,6 +1825,7 @@
     }
 
     function removeExternalSubtitleTracks() {
+        if(state.remoteSubtitleURL){URL.revokeObjectURL(state.remoteSubtitleURL);state.remoteSubtitleURL=null;}
         elements.videoPlayer.querySelectorAll('track[data-external]').forEach((track) => {
             track.remove();
         });
@@ -1780,7 +1845,7 @@
         return track;
     }
 
-    function applySubtitleChoice(value) {
+    async function applySubtitleChoice(value) {
         removeExternalSubtitleTracks();
         if (!value) return;
 
@@ -1795,12 +1860,24 @@
         const stream = state.streams[state.activeStreamIndex];
         const subtitle = subtitleOptions(stream)[index];
         if (!subtitle) return;
-        const source = subtitleTrackSrc(subtitle);
+        const source = isSafeWebURL(subtitle.url) && subtitle.url.startsWith('https:') ? subtitle.url : subtitleTrackSrc(subtitle);
         if (!source) {
             showToast('This subtitle source could not be verified.', 'error');
             return;
         }
-        attachSubtitleTrack(source, subtitle.label, subtitle.lang, 'remote');
+        try {
+            const response = await fetch(source, { credentials: 'omit', signal: AbortSignal.timeout(12000) });
+            if (!response.ok || Number(response.headers.get('content-length')) > 2000000) throw new Error('Subtitle request failed');
+            const reader=response.body.getReader(); let size=0; const chunks=[];
+            while(true){const {done,value:chunk}=await reader.read();if(done)break;size+=chunk.length;if(size>2000000){await reader.cancel();throw new Error('Subtitle file too large');}chunks.push(chunk);}
+            const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
+            let content=new TextDecoder().decode(bytes);
+            if (!content.trimStart().startsWith('WEBVTT')) content=srtToVtt(content);
+            if (elements.subtitleSelect.value !== value || !elements.playerDialog.open) return;
+            if (state.remoteSubtitleURL) URL.revokeObjectURL(state.remoteSubtitleURL);
+            state.remoteSubtitleURL=URL.createObjectURL(new Blob([content],{type:'text/vtt'}));
+            attachSubtitleTrack(state.remoteSubtitleURL, subtitle.label, subtitle.lang, 'remote');
+        } catch { showToast('This provider blocks browser subtitle access or the file is unavailable. Try another provider or load a local subtitle file.', 'warning'); }
     }
 
     function srtToVtt(text) {
@@ -1858,7 +1935,7 @@
     function toggleDataSaver() {
         state.dataSaver = false;
         try {
-            localStorage.removeItem(STORAGE_KEYS.dataSaver);
+            saveStored(STORAGE_KEYS.dataSaver, null);
         } catch {
             // The selection still applies for this session when storage is blocked.
         }
@@ -1923,6 +2000,9 @@
         elements.videoLoading.hidden = false;
         const loadingText = elements.videoLoading.querySelector('p');
         if (loadingText) loadingText.textContent = 'Preparing the video stream…';
+        const qualitySelect = document.getElementById('player-quality');
+        if (qualitySelect) { qualitySelect.replaceChildren(makeOption('-1', 'Auto quality')); qualitySelect.disabled = true; }
+        let networkRecoveries = 0, mediaRecoveries = 0;
         const nativeHls = elements.videoPlayer.canPlayType('application/vnd.apple.mpegurl');
         if (nativeHls) {
             const finishLoading = () => {
@@ -1953,7 +2033,8 @@
             fragLoadingMaxRetry: 8,
             manifestLoadingMaxRetry: 4,
             levelLoadingMaxRetry: 6,
-            startLevel: 0
+            startLevel: -1,
+            capLevelToPlayerSize: true
         });
         state.hlsPlayer.on(window.Hls.Events.MEDIA_ATTACHED, () => {
             state.hlsPlayer?.loadSource(url);
@@ -2052,9 +2133,11 @@
         if (!state.hlsPlayer) return;
         state.hlsPlayer.destroy();
         state.hlsPlayer = null;
+        const quality=document.getElementById('player-quality');if(quality){quality.disabled=true;quality.replaceChildren(makeOption('-1','Auto quality'));}
     }
 
     function clearVideoElement() {
+        removeExternalSubtitleTracks();
         destroyHls();
         elements.videoPlayer.pause();
         elements.videoPlayer.removeAttribute('src');
@@ -2066,7 +2149,7 @@
         if (!state.playerMedia || !Number.isFinite(elements.videoPlayer.duration)) return;
 
         const now = Date.now();
-        if (!force && now - state.lastProgressSave < 5_000) return;
+        if (!force && now - state.lastProgressSave < 15_000) return;
         if (elements.videoPlayer.currentTime < 2) return;
 
         const entry = {
@@ -2078,7 +2161,7 @@
 
         state.lastProgressSave = now;
         state.continueEntry = entry;
-        localStorage.setItem(STORAGE_KEYS.continueWatching, JSON.stringify(entry));
+        saveStored(STORAGE_KEYS.continueWatching, JSON.stringify(entry));
         renderContinueWatching();
     }
 
@@ -2113,7 +2196,7 @@
             showToast('Added to My list.');
         }
 
-        localStorage.setItem(STORAGE_KEYS.watchlist, JSON.stringify(state.watchlist));
+        saveStored(STORAGE_KEYS.watchlist, JSON.stringify(state.watchlist));
         updateListCount();
         renderWatchlist();
         return added;
@@ -2142,7 +2225,7 @@
             serialized,
             ...state.recentlyViewed.filter((item) => mediaKey(item) !== mediaKey(serialized))
         ].slice(0, 20);
-        localStorage.setItem(STORAGE_KEYS.recentlyViewed, JSON.stringify(state.recentlyViewed));
+        saveStored(STORAGE_KEYS.recentlyViewed, JSON.stringify(state.recentlyViewed));
         renderRecentlyViewed();
     }
 
@@ -2162,7 +2245,7 @@
     function clearHistory() {
         if (!state.recentlyViewed.length || !window.confirm('Clear recently viewed titles from this browser?')) return;
         state.recentlyViewed = [];
-        localStorage.removeItem(STORAGE_KEYS.recentlyViewed);
+        saveStored(STORAGE_KEYS.recentlyViewed, null);
         renderRecentlyViewed();
         renderHistory();
         showToast('History cleared.');
@@ -2734,7 +2817,7 @@
     }
 
     function saveAddonURLs() {
-        localStorage.setItem(STORAGE_KEYS.addonURLs, JSON.stringify(state.addonURLs));
+        saveStored(STORAGE_KEYS.addonURLs, JSON.stringify(state.addonURLs));
     }
 
     function rememberAddon(manifest, previousAddon) {
@@ -3398,8 +3481,8 @@
             state.addonURLs = Array.isArray(payload.addonURLs)
                 ? payload.addonURLs.filter((value) => typeof value === 'string' && value.length <= 8192).slice(0, 20)
                 : [];
-            localStorage.setItem(STORAGE_KEYS.watchlist, JSON.stringify(state.watchlist));
-            localStorage.setItem(STORAGE_KEYS.recentlyViewed, JSON.stringify(state.recentlyViewed));
+            saveStored(STORAGE_KEYS.watchlist, JSON.stringify(state.watchlist));
+            saveStored(STORAGE_KEYS.recentlyViewed, JSON.stringify(state.recentlyViewed));
             saveAddonURLs();
             updateListCount();
             renderRecentlyViewed();
@@ -3494,7 +3577,7 @@
         const bytes = new Uint8Array(16);
         crypto.getRandomValues(bytes);
         const clientId = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('');
-        localStorage.setItem(STORAGE_KEYS.addonClientId, clientId);
+        saveStored(STORAGE_KEYS.addonClientId, clientId);
         return clientId;
     }
 })();

@@ -8,7 +8,8 @@ It works immediately with a fresh public metadata catalog, an offline fallback, 
 
 - Responsive hero, movie/series rails, search, details, ratings, and trailers
 - Working HTML5 player with source selection, subtitles, speed, fullscreen, and progress
-- Continue Watching and My List stored only in the browser
+- Email/password accounts with per-user synchronization for My List, history, progress, region, player settings, and add-ons
+- Guest mode with browser-only storage, export, recovery codes, conflict protection, and account deletion
 - Country-based legal watch-provider results stored as a browser preference
 - Per-browser manual add-on install, list, refresh, and remove controls
 - Permanent Cinemeta movie/series search plus legal TVmaze series search, with an offline fallback
@@ -52,13 +53,14 @@ runtime dependency.
 
 Public movie metadata is cached briefly at the edge. Search queries, browser add-ons,
 streams, contact messages, cookies, authorization headers, and every modifying request
-are deliberately excluded from shared caching. Saved add-on manifest URLs stay in the
-visitor's browser and are attached only to that visitor's API requests. TShow does not
-put them in a shared database or expose them to other visitors.
+are deliberately excluded from shared caching. Guest add-on manifest URLs stay in the
+visitor's browser. Signed-in visitors can synchronize them to their private account
+record. Every API request carries only that visitor's list; TShow does not expose one
+user's add-ons to another.
 
 For a repository connected through Cloudflare Workers Builds:
 
-1. Select the `cvmturan/cvmturan` repository and the `main` production branch.
+1. Select the `cvmturan/tshow` repository and the `main` production branch.
 2. Use the Worker name `tshow` (it must match `wrangler.jsonc`).
 3. Leave the build command empty and use the default `npx wrangler deploy` as the deploy
    command. Wrangler automatically runs the included asset build and bundles the HLS
@@ -76,6 +78,17 @@ pnpm run cf:deploy
 `TMDB_API_KEY` can be added as an optional encrypted Cloudflare Worker secret. Without
 it, permanent Cinemeta and TVmaze discovery/search continue working; TMDB-specific
 provider and metadata routes report that the optional service is unavailable.
+
+Email registration, login, recovery codes, account deletion, and per-user sync use the
+bound `tshow-accounts` D1 database. Apply migrations before the first deployment with
+`npx wrangler d1 migrations apply tshow-accounts --remote`.
+
+Google and Apple buttons stay disabled until their provider credentials are configured.
+Register `https://showt.fun/api/auth/google/callback` with Google and
+`https://showt.fun/api/auth/apple/callback` with Apple, then add the corresponding
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APPLE_CLIENT_ID`, and
+`APPLE_CLIENT_SECRET` encrypted Worker secrets. For Apple, the client secret is the
+signed JWT generated from the Sign in with Apple key.
 
 Legacy `/api/proxy`, `/api/transcode`, and `/api/debrid` routes return HTTP 410. Cloudflare
 never downloads, caches, proxies, or converts media. Compatible HTTPS MP4, WebM, and HLS

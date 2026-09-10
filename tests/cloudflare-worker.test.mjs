@@ -154,6 +154,36 @@ test('direct compatible video is returned unchanged and never fetched by TShow',
   assert.equal(mediaRequests, 0);
 });
 
+test('series add-ons receive the selected episode identifier unchanged', async (t) => {
+  const originalFetch = globalThis.fetch;
+  const manifestURL = 'https://series-addon.example/manifest.json';
+  let requestedEpisode = '';
+  globalThis.fetch = async (request) => {
+    const url = new URL(request.url || request);
+    if (url.href === manifestURL) return Response.json({
+      id: 'com.example.series', name: 'Series Test', version: '1.0.0',
+      resources: ['stream'], types: ['series'], idPrefixes: ['tt']
+    });
+    if (url.hostname === 'series-addon.example' && url.pathname.startsWith('/stream/series/')) {
+      requestedEpisode = decodeURIComponent(url.pathname.split('/').at(-1).replace(/\.json$/, ''));
+      return Response.json({
+        streams: [{ name: 'Episode stream', url: 'https://media.example/episode.m3u8' }]
+      });
+    }
+    throw new Error(`Unexpected request: ${url.href}`);
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  const response = await worker.fetch(new Request(
+    'https://showt.fun/api/streams/series/tt0903747%3A1%3A1',
+    { headers: { 'X-TShow-Addon-Urls': addonHeader([manifestURL]) } }
+  ), env(), createContext());
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(requestedEpisode, 'tt0903747:1:1');
+  assert.equal(body.streams[0].playbackMode, 'hls');
+});
+
 test('add-on installation rejects local-network and insecure manifest URLs', async () => {
   for (const manifestURL of [
     'http://addon.example/manifest.json',

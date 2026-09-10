@@ -10,7 +10,7 @@
 
     function storedAddonURLs() {
         try {
-            const saved = JSON.parse(localStorage.getItem(ADDON_URLS_KEY) || '[]');
+            const saved = JSON.parse(localStorage.getItem(window.TShowAccount?.storageKey('addonURLs') || ADDON_URLS_KEY) || '[]');
             return Array.isArray(saved)
                 ? saved.filter((value) => typeof value === 'string' && value.length <= 8192).slice(0, 20)
                 : [];
@@ -21,7 +21,7 @@
 
     function storedManifests() {
         try {
-            const saved = JSON.parse(localStorage.getItem(MANIFEST_CACHE_KEY) || '[]');
+            const saved = JSON.parse(localStorage.getItem(window.TShowAccount?.user ? window.TShowAccount.storageKey('manifest-cache') : MANIFEST_CACHE_KEY) || '[]');
             return Array.isArray(saved) ? saved.filter((item) => item?.manifestURL).slice(-20) : [];
         } catch {
             return [];
@@ -51,7 +51,7 @@
         const cached = storedManifests().filter((item) => item.manifestURL !== compact.manifestURL);
         cached.push(compact);
         try {
-            localStorage.setItem(MANIFEST_CACHE_KEY, JSON.stringify(cached.slice(-20)));
+            localStorage.setItem(window.TShowAccount?.user ? window.TShowAccount.storageKey('manifest-cache') : MANIFEST_CACHE_KEY, JSON.stringify(cached.slice(-20)));
         } catch {
             // URL-only persistence remains available if browser storage is full.
         }
@@ -105,7 +105,7 @@
             // Let the browser handle malformed input exactly as it normally would.
             return nativeFetch(input, init);
         }
-        if (url.origin === window.location.origin && url.pathname.startsWith('/api/')) {
+        if (url.origin === window.location.origin && (url.pathname.startsWith('/api/addons') || url.pathname.startsWith('/api/streams'))) {
             const headers = new Headers(input instanceof Request ? input.headers : undefined);
             new Headers(init.headers || {}).forEach((value, key) => headers.set(key, value));
             const encoded = encodedAddonURLs();
