@@ -21,12 +21,12 @@
     <link rel="icon" href="/assets/tshow-icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="/assets/tshow-icon-192.png">
     <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="stylesheet" href="/css/main.css?v=20260910-2">
+    <link rel="stylesheet" href="/css/main.css?v=20260910-3">
     <script src="/vendor/hls/hls.min.js" defer></script>
-    <link rel="stylesheet" href="/css/accounts.css?v=20260910-2">
-    <script src="/js/accounts.js?v=20260910-2" defer></script>
-    <script src="/js/cloudflare-context.js?v=20260910-2" defer></script>
-    <script src="/js/app.js?v=20260910-2" defer></script>
+    <link rel="stylesheet" href="/css/accounts.css?v=20260910-3">
+    <script src="/js/accounts.js?v=20260910-3" defer></script>
+    <script src="/js/cloudflare-context.js?v=20260910-3" defer></script>
+    <script src="/js/app.js?v=20260910-3" defer></script>
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"TShow","url":"https://showt.fun/","logo":"https://showt.fun/assets/tshow-icon-512.png","email":"support@showt.fun"}</script>
 </head>
 <body>
@@ -142,7 +142,7 @@
                             <p class="section-kicker">Fresh from the catalog</p>
                             <h2>Popular now</h2>
                         </div>
-                        <span class="section-note" id="catalog-mode">Loading catalog…</span>
+                        <span class="section-note" id="catalog-mode">Ready · refreshing catalog</span>
                     </div>
                     <div class="media-rail" id="trending-rail" aria-live="polite"></div>
                 </section>
@@ -635,9 +635,9 @@
 <label>Account action<select id="account-mode"><option value="login">Sign in</option><option value="register">Create an account</option><option value="recover">Recover with saved code</option></select></label>
 <label id="account-name-field" hidden>Your name<input name="name" autocomplete="name" maxlength="80"></label>
 <label>Email<input name="email" type="email" autocomplete="email" maxlength="254" required></label>
-<label>Password<input name="password" type="password" minlength="12" maxlength="128" autocomplete="current-password" required></label>
+<label>Password<input name="password" type="password" minlength="8" maxlength="128" pattern="(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,128}" aria-describedby="account-password-rules" autocomplete="current-password" required></label>
 <label id="account-recovery-field" hidden>Recovery code<input name="recoveryCode" autocomplete="off" maxlength="100"></label>
-<p>Use at least 12 characters. Creating an account saves your email and account data as described in our <a href="/legal.html#privacy">Privacy Policy</a>.</p>
+<p class="password-rules" id="account-password-rules"><strong>For new passwords:</strong> 8 or more characters with an uppercase letter, a number and a special character.</p><p>Creating an account saves your email and account data as described in our <a href="/legal.html#privacy">Privacy Policy</a>.</p>
 <button id="account-submit" class="account-button" type="submit">Sign in</button>
 </form></div>
 <div id="account-recovery-created" hidden><h3>Save your recovery code</h3><code id="account-new-code"></code><p>This code can reset your password. Keep it private. There is no email recovery yet.</p><button type="button" id="account-recovery-done" class="account-button">I saved my code — continue</button></div>
@@ -649,3 +649,4 @@
 </div><p id="account-message" role="status" aria-live="polite"></p></dialog>
 </body>
 </html>
+

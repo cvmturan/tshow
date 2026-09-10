@@ -70,11 +70,15 @@
         const form = document.getElementById('account-form'), message = document.getElementById('account-message');
         const mode = document.getElementById('account-mode');
         const updateMode = () => {
+            const creatingPassword = mode.value !== 'login';
             document.getElementById('account-name-field').hidden = mode.value !== 'register';
             form.elements.name.required = mode.value === 'register';
             document.getElementById('account-recovery-field').hidden = mode.value !== 'recover';
             form.elements.recoveryCode.required = mode.value === 'recover';
             form.elements.password.autocomplete = mode.value === 'login' ? 'current-password' : 'new-password';
+            if (creatingPassword) form.elements.password.setAttribute('pattern', '(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,128}');
+            else form.elements.password.removeAttribute('pattern');
+            document.getElementById('account-password-rules').hidden = !creatingPassword;
             document.getElementById('account-submit').textContent = ({ login: 'Sign in', register: 'Create account', recover: 'Reset password' })[mode.value];
         };
         mode.addEventListener('change', updateMode); updateMode();
@@ -174,3 +178,4 @@
     window.addEventListener('beforeunload', event => { if (pending.size) { event.preventDefault(); event.returnValue = ''; } });
     setInterval(() => { if (pending.size) void flush(); }, 30000);
 })();
+

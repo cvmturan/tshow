@@ -24,7 +24,13 @@ export async function readBody(request, limit = 262144) {
 }
 async function bodyJSON(request) { try { return JSON.parse(await readBody(request)); } catch (e) { if (e.status) throw e; fail('Invalid JSON.'); } }
 function email(value) { const e = String(value || '').trim().toLowerCase(); if (e.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) fail('Enter a valid email address.'); return e; }
-function password(value) { if (typeof value !== 'string' || value.length < 12 || value.length > 128) fail('Use a password of 12–128 characters.'); return value; }
+function password(value, requireStrength = false) {
+  if (typeof value !== 'string' || value.length < 8 || value.length > 128) fail('Use a password of 8–128 characters.');
+  if (requireStrength && (!/[A-Z]/.test(value) || !/\d/.test(value) || !/[^A-Za-z0-9]/.test(value))) {
+    fail('Use at least 8 characters with an uppercase letter, a number, and a special character.');
+  }
+  return value;
+}
 export async function hashPassword(value, salt = random()) {
   const key = await crypto.subtle.importKey('raw', encoder.encode(value), 'PBKDF2', false, ['deriveBits']);
   // Workers Web Crypto supports at most 100,000 PBKDF2 iterations.
@@ -151,7 +157,7 @@ export async function accountRoute(request, env) {
     }
     if (p === '/api/auth/register' && method === 'POST') {
       await limit(db, request, 'register', 5);
-      const data = await bodyJSON(request), address = email(data.email), pass = password(data.password);
+      const data = await bodyJSON(request), address = email(data.email), pass = password(data.password, true);
       const name = String(data.name || '').trim().slice(0, 80); if (!name) fail('Enter your name.');
       if (await db.prepare('SELECT id FROM users WHERE email=?').bind(address).first()) fail('This email cannot be registered. Try signing in or recovering your account.', 409);
       const recoveryCode = random(), hashed = await hashPassword(pass);
@@ -168,7 +174,7 @@ export async function accountRoute(request, env) {
     }
     if (p === '/api/auth/recover' && method === 'POST') {
       await limit(db, request, 'recover', 5);
-      const data = await bodyJSON(request), address = email(data.email), pass = password(data.password);
+      const data = await bodyJSON(request), address = email(data.email), pass = password(data.password, true);
       const user = await db.prepare('SELECT * FROM users WHERE email=? AND recovery_hash=?').bind(address, await digest(String(data.recoveryCode || ''))).first();
       if (!user) fail('Email or recovery code is incorrect.', 401);
       const recoveryCode = random(), hashed = await hashPassword(pass);
@@ -225,3 +231,4 @@ export async function cleanAccounts(env) {
   const time = now();
   await env.DB.batch(['sessions', 'auth_limits', 'oauth_states'].map(table => env.DB.prepare(`DELETE FROM ${table} WHERE expires_at<?`).bind(time)));
 }
+

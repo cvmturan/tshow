@@ -25,6 +25,7 @@ function addonHeader(urls) {
 
 test('only public metadata endpoints qualify for edge caching', () => {
   assert.equal(cacheTTL(new Request('https://tshow.example/api/tmdb/popular/movies')), 900);
+  assert.equal(cacheTTL(new Request('https://tshow.example/api/addons/catalog/org.cvmturan.discovery/series/top')), 14400);
   assert.equal(cacheTTL(new Request('https://tshow.example/api/tmdb/search?query=private')), 0);
   assert.equal(cacheTTL(new Request('https://tshow.example/api/addons')), 0);
   assert.equal(cacheTTL(new Request('https://tshow.example/api/streams/movie/tt123')), 0);
@@ -136,7 +137,7 @@ test('direct compatible video is returned unchanged and never fetched by TShow',
       resources: ['stream'], types: ['movie'], idPrefixes: ['tt']
     });
     if (url.href === 'https://legal-addon.example/stream/movie/tt1234567.json') return Response.json({
-      streams: [{ name: 'Licensed sample', url: 'https://media.example/video.mp4' }]
+      streams: [{ name: 'Licensed sample', url: 'https://media.example/video.mp4', behaviorHints: { videoSize: 1610612736 } }]
     });
     if (url.hostname === 'media.example') mediaRequests += 1;
     throw new Error(`Unexpected request: ${url.href}`);
@@ -151,7 +152,36 @@ test('direct compatible video is returned unchanged and never fetched by TShow',
   assert.equal(stream.url, 'https://media.example/video.mp4');
   assert.equal(stream.browserReady, true);
   assert.equal(stream.directFromProvider, true);
+  assert.equal(stream.sizeBytes, 1610612736);
+  assert.equal(stream.sizeLabel, '1.5 GB');
   assert.equal(mediaRequests, 0);
+});
+
+test('catalog cards omit full series episode payloads', async (t) => {
+  const originalFetch = globalThis.fetch;
+  const manifestURL = 'https://catalog-addon.example/manifest.json';
+  globalThis.fetch = async (request) => {
+    const url = new URL(request.url || request);
+    if (url.href === manifestURL) return Response.json({
+      id: 'com.example.catalog', name: 'Catalog Test', version: '1.0.0',
+      resources: ['catalog'], types: ['series'], catalogs: [{ type: 'series', id: 'top' }]
+    });
+    if (url.hostname === 'catalog-addon.example') return Response.json({
+      metas: [{ id: 'tt1234567', type: 'series', name: 'Small card', poster: 'https://images.example/poster.jpg', videos: Array.from({ length: 200 }, (_, i) => ({ id: `tt1234567:1:${i + 1}` })) }]
+    });
+    throw new Error(`Unexpected request: ${url.href}`);
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  const response = await worker.fetch(new Request(
+    'https://showt.fun/api/addons/catalog/com.example.catalog/series/top',
+    { headers: { 'X-TShow-Addon-Urls': addonHeader([manifestURL]) } }
+  ), env(), createContext());
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.metas[0].name, 'Small card');
+  assert.equal('videos' in body.metas[0], false);
+  assert.ok(JSON.stringify(body).length < 1000);
 });
 
 test('series add-ons receive the selected episode identifier unchanged', async (t) => {
@@ -248,3 +278,4 @@ test('public metadata caching works without caching private add-on routes', asyn
   assert.equal(second.headers.get('x-tshow-edge-cache'), 'HIT');
   assert.equal(calls, 1);
 });
+

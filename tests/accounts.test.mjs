@@ -15,9 +15,10 @@ test('accounts: sessions, isolated storage, conflicts, recovery and deletion', a
  async function call(path,method='GET',data,cookie='',origin='https://showt.fun'){
   return mf.dispatchFetch('https://showt.fun'+path,{method,headers:{Origin:origin,'X-TShow-Request':'1','Content-Type':'application/json',Cookie:cookie},body:data===undefined?undefined:JSON.stringify(data)});
  }
- const register=async(email)=>{const r=await call('/api/auth/register','POST',{name:'Test Viewer',email,password:'correct horse battery staple'});assert.equal(r.status,200,await r.clone().text());assert.match(r.headers.get('set-cookie'),/HttpOnly; Secure; SameSite=Lax/);return {cookie:r.headers.get('set-cookie').split(';')[0],...(await r.json())};};
+ const register=async(email)=>{const r=await call('/api/auth/register','POST',{name:'Test Viewer',email,password:'GoodPass1!'});assert.equal(r.status,200,await r.clone().text());assert.match(r.headers.get('set-cookie'),/HttpOnly; Secure; SameSite=Lax/);return {cookie:r.headers.get('set-cookie').split(';')[0],...(await r.json())};};
  assert.equal((await call('/api/account/data')).status,401);
  assert.equal((await call('/api/auth/register','POST',{name:'Test',email:'x@example.com',password:'long enough password'},'','https://evil.example')).status,403);
+ assert.equal((await call('/api/auth/register','POST',{name:'Test',email:'weak@example.com',password:'lowercase1!'})).status,400);
  const a=await register('alice@example.com'),b=await register('bob@example.com');
  assert.notEqual(a.user.id,b.user.id);assert.equal(a.recoveryCode.length,43);
  const put=(cookie,version,value)=>call('/api/account/data/watchlist','PUT',{version,value},cookie);
@@ -27,17 +28,18 @@ test('accounts: sessions, isolated storage, conflicts, recovery and deletion', a
  assert.equal((await put(a.cookie,1,[])).status,200);
  assert.equal((await call('/api/account/data/addonURLs','PUT',{version:0,value:['javascript:alert(1)']},a.cookie)).status,400);
  assert.equal((await call('/api/auth/login','POST',{email:'alice@example.com',password:'wrong password here'})).status,401);
- r=await call('/api/auth/recover','POST',{email:'alice@example.com',password:'a different secure password',recoveryCode:a.recoveryCode});assert.equal(r.status,200,await r.clone().text());
+ r=await call('/api/auth/recover','POST',{email:'alice@example.com',password:'Different7!',recoveryCode:a.recoveryCode});assert.equal(r.status,200,await r.clone().text());
  const recovered=await r.json(),newCookie=r.headers.get('set-cookie').split(';')[0];assert.notEqual(recovered.recoveryCode,a.recoveryCode);
  assert.equal((await call('/api/account/data','GET',undefined,a.cookie)).status,401);
- assert.equal((await call('/api/auth/recover','POST',{email:'alice@example.com',password:'another secure password',recoveryCode:a.recoveryCode})).status,401);
- assert.equal((await call('/api/account','DELETE',{confirm:'DELETE',password:'a different secure password'},newCookie)).status,200);
+ assert.equal((await call('/api/auth/recover','POST',{email:'alice@example.com',password:'Another8!',recoveryCode:a.recoveryCode})).status,401);
+ assert.equal((await call('/api/account','DELETE',{confirm:'DELETE',password:'Different7!'},newCookie)).status,200);
  assert.equal((await call('/api/account/data','GET',undefined,newCookie)).status,401);
  assert.equal((await db.prepare('SELECT count(*) AS n FROM user_data WHERE user_id=?').bind(a.user.id).first()).n,0);
  assert.equal((await call('/api/auth/google/start')).status,503);
  assert.equal((await call('/api/auth/logout','POST',{},b.cookie)).status,200);
  assert.equal((await call('/api/account/data','GET',undefined,b.cookie)).status,401);
 });
+
 
 
 

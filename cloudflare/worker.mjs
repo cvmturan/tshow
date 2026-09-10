@@ -66,13 +66,74 @@ function resourceURL(manifestURL,resource,type,id,extra={}) { const url=remoteUR
 async function contextAddons(request) { const results=await Promise.all(customEntries(request).map(async entry=>{try{const manifestURL=remoteURL(entry.manifestURL).href;if(validManifest(entry.manifest)&&!BUILT_INS.some(x=>x.id===entry.manifest.id))return normalizeManifest({...entry.manifest,manifestURL},{custom:true});const r=await remoteJSON(manifestURL,'Could not fetch the manifest',1024*1024);if(!validManifest(r.data)||BUILT_INS.some(x=>x.id===r.data.id))return null;return normalizeManifest({...r.data,manifestURL:r.finalURL},{custom:true});}catch{return null;}}));return [...BUILT_INS,...results.filter(Boolean)]; }
 function addonFor(addons,id) { return addons.find(x=>x.id===id); }
 async function tmdb(env,path,params={}) { if(!env.TMDB_API_KEY)throw new Error('TMDB metadata is temporarily unavailable');const url=new URL('https://api.themoviedb.org/3'+path);for(const[k,v]of Object.entries(params))if(v!=null&&String(v).length<=500)url.searchParams.set(k,v);url.searchParams.set('api_key',env.TMDB_API_KEY);const response=await fetch(url);if(!response.ok)throw new Error('TMDB metadata is temporarily unavailable');return response.json(); }
-export function cacheTTL(request) { if(request.method!=='GET'||request.headers.has('authorization')||request.headers.has('cookie')||request.headers.has('range'))return 0;const p=new URL(request.url).pathname;if(p==='/api/health'||p==='/api/tmdb/health')return 60;if(p.startsWith('/api/tmdb/')&&!p.includes('/search')&&!p.includes('/image/'))return 900;if(p.startsWith('/api/addons/catalog/org.cvmturan.discovery/'))return 900;return 0; }
+export function cacheTTL(request) { if(request.method!=='GET'||request.headers.has('authorization')||request.headers.has('cookie')||request.headers.has('range'))return 0;const p=new URL(request.url).pathname;if(p==='/api/health'||p==='/api/tmdb/health')return 60;if(p.startsWith('/api/tmdb/')&&!p.includes('/search')&&!p.includes('/image/'))return 900;if(p.startsWith('/api/addons/catalog/org.cvmturan.discovery/'))return 14400;return 0; }
 function security(response,url,cacheStatus) { const h=new Headers(response.headers);for(const[k,v]of Object.entries(SECURITY))h.set(k,v);if(url.pathname.startsWith('/api/')||['list','calendar','history','addons','settings','help'].includes(url.searchParams.get('view')))h.set('X-Robots-Tag',PRIVATE_ROBOTS);if(cacheStatus)h.set('X-TShow-Edge-Cache',cacheStatus);return new Response(response.body,{status:response.status,headers:h}); }
 async function cached(request,ctx,handler) { const ttl=cacheTTL(request),url=new URL(request.url),key=new Request(url.href,{headers:{Accept:'application/json'}}),store=globalThis.caches?.default;if(ttl&&store){const hit=await store.match(key);if(hit)return security(hit,url,'HIT');}const response=await handler();const result=security(response,url,ttl?'MISS':'BYPASS');if(ttl&&store&&result.ok){const copy=result.clone();copy.headers.set('Cache-Control',`public, max-age=60, s-maxage=${ttl}`);ctx.waitUntil(store.put(key,copy));}return result; }
 function safeURL(v) { try { const u=new URL(String(v||''));return ['https:','http:'].includes(u.protocol)&&u.href.length<=8000?u.href:null;}catch{return null;} }
 function magnet(v) { try{const u=new URL(String(v||''));return u.protocol==='magnet:'&&/^urn:btih:(?:[a-f0-9]{40}|[a-z2-7]{32})$/i.test(u.searchParams.get('xt')||'')?u.href:null;}catch{return null;} }
-function streamShape(raw,addon,index) { if(!raw||typeof raw!=='object')return null;const source=safeURL(raw.url),external=safeURL(raw.externalUrl)||(raw.ytId&&/^[\w-]{6,20}$/.test(raw.ytId)?`https://www.youtube.com/watch?v=${raw.ytId}`:null),app=magnet(raw.url)||(/^(?:[a-f0-9]{40}|[a-z2-7]{32})$/i.test(String(raw.infoHash||''))?`magnet:?xt=urn:btih:${raw.infoHash}`:null),path=(source||'').split(/[?#]/)[0].toLowerCase(),declared=String(raw.type||raw.mimeType||'').toLowerCase(),format=/m3u8$/.test(path)||/mpegurl|hls/.test(declared)?'hls':/\.(mp4|m4v)$/.test(path)||/mp4/.test(declared)?'mp4':/\.webm$/.test(path)||/webm/.test(declared)?'webm':/\.mkv$/.test(path)||/matroska/.test(declared)?'mkv':'',headers=raw.behaviorHints?.proxyHeaders?.request,notWebReady=raw.behaviorHints?.notWebReady===true,direct=Boolean(source&&['mp4','webm','hls'].includes(format)&&source.startsWith('https:')&&!headers&&!notWebReady),attempt=Boolean(source&&!format&&source.startsWith('https:')&&!headers&&!notWebReady),mode=direct?(format==='hls'?'hls':'direct'):app?'external-app':external?'external':source?'external-player':'unsupported';if(!source&&!external&&!app)return null;return {url:direct?source:null,externalPlayerUrl:source,externalAppUrl:app,attemptUrl:attempt?source:null,externalUrl:external||(raw.ytId&&/^[\w-]{6,20}$/.test(raw.ytId)?`https://www.youtube.com/watch?v=${raw.ytId}`:null),ytId:raw.ytId||null,name:String(raw.name||raw.title||addon.name).slice(0,140),title:String(raw.title||raw.name||'Web stream').slice(0,240),description:String(raw.description||'').slice(0,500),quality:String(raw.quality||'').slice(0,20),type:format==='hls'?'application/vnd.apple.mpegurl':format==='mp4'?'video/mp4':format==='webm'?'video/webm':'',format,playbackMode:mode,browserReady:direct,requiresHeaders:Boolean(headers),notWebReady,unsupportedReason:direct||attempt?null:headers?'This source requires provider-specific headers, so TShow will not relay it.':source?'Open this source in the local TShow Player or another external player.':app?'Open this source with a compatible local application.':null,subtitles:Array.isArray(raw.subtitles)?raw.subtitles.filter(x=>safeURL(x?.url)).slice(0,30):[],directFromProvider:direct,behaviorHints:raw.behaviorHints||{},isDemo:addon.id==='org.streamflix.open-samples',sourceAddon:addon.id,sourceAddonName:addon.name,_index:index}; }
-async function addonResource(addons,addonId,resource,type,id,extra={}) { const addon=addonFor(addons,addonId);if(!addon)throw new Error('Add-on is unavailable');if(addon.id==='org.streamflix.open-samples'&&resource==='stream')return {streams:[{url:'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',type:'mp4',name:'Player test · 540p',title:'Flower · MDN CC0 sample'}]};if(!addon.manifestURL)throw new Error('This offline add-on does not provide a remote endpoint');return (await remoteJSON(resourceURL(addon.manifestURL,resource,type,id,extra))).data; }
+function parseSizeHint(...values) {
+  for (const value of values) {
+    const match = String(value || '').match(/(?:^|\s)(\d+(?:\.\d+)?)\s*(TB|GB|MB|KB|TiB|GiB|MiB|KiB)(?:\s|$)/i);
+    if (!match) continue;
+    const unit = match[2].toUpperCase().replace('IB', 'B');
+    const factor = { KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 }[unit];
+    const bytes = Number(match[1]) * factor;
+    if (Number.isFinite(bytes) && bytes > 0) return Math.round(bytes);
+  }
+  return null;
+}
+function formatSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return null;
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const order = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / (1024 ** order);
+  return `${value >= 10 || order === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[order]}`;
+}
+function streamShape(raw, addon, index) {
+  if (!raw || typeof raw !== 'object') return null;
+  const source = safeURL(raw.url);
+  const external = safeURL(raw.externalUrl) || (raw.ytId && /^[\w-]{6,20}$/.test(raw.ytId) ? `https://www.youtube.com/watch?v=${raw.ytId}` : null);
+  const app = magnet(raw.url) || (/^(?:[a-f0-9]{40}|[a-z2-7]{32})$/i.test(String(raw.infoHash || '')) ? `magnet:?xt=urn:btih:${raw.infoHash}` : null);
+  const path = (source || '').split(/[?#]/)[0].toLowerCase();
+  const declared = String(raw.type || raw.mimeType || '').toLowerCase();
+  const format = /m3u8$/.test(path) || /mpegurl|hls/.test(declared) ? 'hls' : /\.(mp4|m4v)$/.test(path) || /mp4/.test(declared) ? 'mp4' : /\.webm$/.test(path) || /webm/.test(declared) ? 'webm' : /\.mkv$/.test(path) || /matroska/.test(declared) ? 'mkv' : '';
+  const hints = raw.behaviorHints && typeof raw.behaviorHints === 'object' ? raw.behaviorHints : {};
+  const headers = hints.proxyHeaders?.request;
+  const notWebReady = hints.notWebReady === true;
+  const direct = Boolean(source && ['mp4', 'webm', 'hls'].includes(format) && source.startsWith('https:') && !headers && !notWebReady);
+  const attempt = Boolean(source && !format && source.startsWith('https:') && !headers && !notWebReady);
+  const mode = direct ? (format === 'hls' ? 'hls' : 'direct') : app ? 'external-app' : external ? 'external' : source ? 'external-player' : 'unsupported';
+  const reportedBytes = [hints.videoSize, raw.sizeBytes, raw.size].map(Number).find((value) => Number.isFinite(value) && value > 0);
+  const sizeBytes = reportedBytes || parseSizeHint(raw.name, raw.title, raw.description, hints.filename);
+  if (!source && !external && !app) return null;
+  return {url:direct?source:null,externalPlayerUrl:source,externalAppUrl:app,attemptUrl:attempt?source:null,externalUrl:external,ytId:raw.ytId||null,name:String(raw.name||raw.title||addon.name).slice(0,140),title:String(raw.title||raw.name||'Web stream').slice(0,240),description:String(raw.description||'').slice(0,500),quality:String(raw.quality||'').slice(0,20),sizeBytes:sizeBytes||null,sizeLabel:formatSize(sizeBytes),type:format==='hls'?'application/vnd.apple.mpegurl':format==='mp4'?'video/mp4':format==='webm'?'video/webm':'',format,playbackMode:mode,browserReady:direct,requiresHeaders:Boolean(headers),notWebReady,unsupportedReason:direct||attempt?null:headers?'This source requires provider-specific headers, so TShow will not relay it.':source?'Open this source in the local TShow Player or another external player.':app?'Open this source with a compatible local application.':null,subtitles:Array.isArray(raw.subtitles)?raw.subtitles.filter(x=>safeURL(x?.url)).slice(0,30):[],directFromProvider:direct,behaviorHints:hints,isDemo:addon.id==='org.streamflix.open-samples',sourceAddon:addon.id,sourceAddonName:addon.name,_index:index};
+}
+function compactCatalog(data, typeHint = '') {
+  const items = Array.isArray(data?.metas) ? data.metas : Array.isArray(data?.results) ? data.results : [];
+  const metas = items.slice(0, 100).map((meta) => {
+    if (!meta || typeof meta !== 'object') return null;
+    const id = String(meta.id || meta.imdb_id || '').slice(0, 180);
+    const name = String(meta.name || meta.title || '').slice(0, 240);
+    if (!id || !name) return null;
+    const rating = Number(meta.imdbRating ?? meta.vote_average);
+    return {
+      id,
+      imdb_id: /^tt\d+$/i.test(String(meta.imdb_id || id)) ? String(meta.imdb_id || id) : null,
+      type: ['movie', 'series'].includes(meta.type) ? meta.type : typeHint,
+      name,
+      poster: safeURL(meta.poster || meta.poster_path),
+      background: safeURL(meta.background || meta.backdrop_path),
+      description: String(meta.description || meta.overview || '').slice(0, 1500),
+      releaseInfo: String(meta.releaseInfo || meta.release_date || meta.first_air_date || meta.year || '').slice(0, 40),
+      imdbRating: Number.isFinite(rating) ? rating : 0,
+      moviedb_id: Number(meta.moviedb_id || meta.tmdb_id) || null,
+      genres: (Array.isArray(meta.genres) ? meta.genres : []).map(String).slice(0, 12),
+      runtime: Number(meta.runtime) || null
+    };
+  }).filter(Boolean);
+  return { metas, hasMore: Boolean(data?.hasMore), cacheMaxAge: Math.max(0, Number(data?.cacheMaxAge) || 0) };
+}
+async function addonResource(addons,addonId,resource,type,id,extra={}) { const addon=addonFor(addons,addonId);if(!addon)throw new Error('Add-on is unavailable');if(addon.id==='org.streamflix.open-samples'&&resource==='stream')return {streams:[{url:'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',type:'mp4',name:'Player test · 540p',title:'Flower · MDN CC0 sample'}]};if(!addon.manifestURL)throw new Error('This offline add-on does not provide a remote endpoint');const data=(await remoteJSON(resourceURL(addon.manifestURL,resource,type,id,extra))).data;return resource==='catalog'?compactCatalog(data,type):data; }
 function tvmazeMeta(show,requestedId=null) { if(!show?.id||!show?.name)return null;const imdb=/^tt\d+$/i.test(show.externals?.imdb||'')?show.externals.imdb:null,id=imdb||requestedId||`tvmaze:${show.id}`;return {id,imdb_id:imdb,type:'series',name:String(show.name).slice(0,240),description:String(show.summary||'').replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim(),releaseInfo:String(show.premiered||'').slice(0,4),poster:show.image?.original||show.image?.medium||null,background:show.image?.original||null,imdbRating:Number(show.rating?.average)||0,genres:Array.isArray(show.genres)?show.genres.slice(0,20):[],runtime:Number(show.averageRuntime||show.runtime)||null,videos:[],behaviorHints:{},links:show.url?[{name:'TVmaze',category:'source',url:show.url}]:[]}; }
 async function tvmazeSearch(query) { const r=await fetch('https://api.tvmaze.com/search/shows?q='+encodeURIComponent(String(query||'').slice(0,120)));if(!r.ok)throw new Error('TVmaze search failed');return {metas:(await r.json()).slice(0,20).map(x=>tvmazeMeta(x.show)).filter(Boolean)}; }
 async function apiRoute(request,env) { const url=new URL(request.url),p=url.pathname,method=request.method;if(p==='/api/health')return json({status:'ok',hostScope:'cloudflare',tmdbConfigured:Boolean(env.TMDB_API_KEY),mediaRelay:false});if(p==='/api/contact'&&method==='POST')return json({success:true,fallback:'mailto',recipient:'cvmturan@gmail.com',message:'Opening your email app…'});if(p.startsWith('/api/proxy')||p.startsWith('/api/transcode')||p.startsWith('/api/debrid'))return error('This route is intentionally unavailable. TShow does not proxy, transcode, download, or debrid media.',410);if(p==='/api/tmdb/health')return json({status:'ok',tmdbKey:Boolean(env.TMDB_API_KEY)});
@@ -88,3 +149,4 @@ async function apiRoute(request,env) { const url=new URL(request.url),p=url.path
  }
  if(p.startsWith('/api/streams/')){const[,,,type,encodedId]=p.split('/');let id;try{id=decodeURIComponent(encodedId||'');}catch{return error('Invalid media id');}if(!['movie','series','tv'].includes(type)||!id)return error('Invalid media id');const addons=await contextAddons(request),selected=(url.searchParams.get('addonIds')||'').split(',').filter(Boolean),usable=addons.filter(a=>(!selected.length||selected.includes(a.id))&&a.resources.includes('stream')&&(!a.types.length||a.types.includes(type==='tv'?'series':type))&&(!a.idPrefixes.length||a.idPrefixes.some(x=>id.startsWith(x))));const sources=await Promise.all(usable.slice(0,20).map(async a=>{try{const raw=(await addonResource(addons,a.id,'stream',type==='tv'?'series':type,id)).streams||[],streams=raw.map((s,i)=>streamShape(s,a,i)).filter(Boolean).slice(0,100);return {addonId:a.id,addonName:a.name,streams,returned:raw.length,actionable:streams.length,unsupported:Math.max(0,raw.length-streams.length)};}catch(e){return {addonId:a.id,addonName:a.name,streams:[],returned:0,actionable:0,unsupported:0,error:e.message};}})),streams=sources.flatMap(x=>x.streams).sort((a,b)=>Number(b.browserReady)-Number(a.browserReady)||String(a.name).localeCompare(String(b.name))).map(({_index,...x})=>x);return json({streams,sources:sources.map(({streams,...x})=>x),count:streams.length});}return error('API route not found',404); }
 export default { async scheduled(_event,env,ctx) { ctx.waitUntil(cleanAccounts(env)); }, async fetch(request,env,ctx) { const url=new URL(request.url);if(url.hostname==='www.showt.fun'){url.hostname='showt.fun';return Response.redirect(url.href,308);}if(url.pathname.startsWith('/api/auth/')||url.pathname.startsWith('/api/account'))return accountRoute(request,env);if(url.pathname==='/api'||url.pathname.startsWith('/api/'))return cached(request,ctx,()=>apiRoute(request,env));const title=url.pathname.match(/^\/(movie|series)\/(\d{1,12}|tt\d{5,12})(?:\/[^/]*)?\/?$/i);if(title){const target=new URL('/',url);target.searchParams.set('title',`${title[1].toLowerCase()==='series'?'tv':'movie'}:${title[2]}`);return new Response(null,{status:302,headers:{Location:target.href,...SECURITY}});}return security(await env.ASSETS.fetch(request),url); } };
+

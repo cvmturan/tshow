@@ -11,6 +11,23 @@
         addonClientId: 'streamflix:addon-client:v1',
         region: 'tshow:region:v1'
     };
+    const HOME_CACHE_KEY = 'tshow:home-catalog:v1';
+    const STARTER_CATALOG = {
+        movies: [
+            ['tt0111161', 'The Shawshank Redemption', '1994', '/9cqNxx0GxF0bflZmeSMuL5tnGzr.jpg', '/kXfqcdQKsToO0OUXHcrrNCHDBzO.jpg', 8.7],
+            ['tt0068646', 'The Godfather', '1972', '/3bhkrj58Vtu7enYsRolD1fZdja1.jpg', '/tmU7GeKVybMWFButWEGl2M4GeiP.jpg', 8.7],
+            ['tt0468569', 'The Dark Knight', '2008', '/qJ2tW6WMUDux911r6m7haRef0WH.jpg', '/nMKdUUepR0i5zn0y1T4CsSB5chy.jpg', 8.5],
+            ['tt0110912', 'Pulp Fiction', '1994', '/d5iIlFn5s0ImszYzBPb8JPIfbXD.jpg', '/suaEOtk1N1sgg2MTM7oZd2cfVp3.jpg', 8.5],
+            ['tt0109830', 'Forrest Gump', '1994', '/arw2vcBveWOVZr6pxd9XTd1TdQa.jpg', '/3h1JZGDhZ8nzxdgvkxha0qBqi05.jpg', 8.5],
+            ['tt0093779', 'The Princess Bride', '1987', '/kTXxdNv44najTayFcrT487xWuDv.jpg', null, 7.7]
+        ],
+        series: [
+            ['tt5180504', 'The Witcher', '2019', '/cZ0d3rtvXPVvuiX22sP79K3Hmjz.jpg', '/foGkPxpw9h8zln81j63mix5B7m8.jpg', 8.0],
+            ['tt8111088', 'The Mandalorian', '2019', '/eU1i6eHXlzMOlEq0ku1Rzq7Y4wA.jpg', '/9ijMGlJKqcslswWUzTEwScm82Gs.jpg', 8.4],
+            ['tt3581920', 'The Last of Us', '2023', '/uKvVjHNqB5VmOrdxqAt2F7J78ED.jpg', '/uDgy6hyPd82kOHh6I95FLtLnj6p.jpg', 8.6],
+            ['tt11280740', 'Severance', '2022', '/pPHpeI2X1qEd1CS1SeyrdhZ4qnT.jpg', '/b1Y8SUb12gPHCSSSNlbX4nB3IKy.jpg', 8.4]
+        ]
+    };
 
     if (window.TShowAccount?.user) {
         for (const key of Object.keys(STORAGE_KEYS)) STORAGE_KEYS[key] = window.TShowAccount.storageKey(key);
@@ -90,13 +107,7 @@
         updateListCount();
         renderContinueWatching();
         renderRecentlyViewed();
-        renderLoadingCards(elements.trendingRail, 8);
-        renderLoadingCards(elements.moviesRail, 8);
-        renderLoadingCards(elements.seriesRail, 8);
-        renderLoadingCards(elements.latestMoviesRail, 8);
-        renderLoadingCards(elements.topMoviesRail, 8);
-        renderLoadingCards(elements.topSeriesRail, 8);
-        renderLoadingCards(elements.airingTodayRail, 8);
+        restoreFastHome();
         updateClock();
         window.setInterval(updateClock, 30_000);
         registerPWA();
@@ -452,6 +463,63 @@
         }, { passive: true });
     }
 
+    function starterItems(type) {
+        const descriptor = { addon: { id: 'org.cvmturan.discovery', name: 'TShow Discovery' }, catalog: { id: 'top', name: 'Popular' }, type };
+        return normalizeLiveCatalog({ metas: STARTER_CATALOG[type === 'movie' ? 'movies' : 'series'].map(([id, name, releaseInfo, poster, background, imdbRating]) => ({
+            id, name, releaseInfo, imdbRating, type,
+            poster: poster ? `https://image.tmdb.org/t/p/w500${poster}` : null,
+            background: background ? `https://image.tmdb.org/t/p/original${background}` : null
+        })) }, descriptor);
+    }
+
+    function restoreFastHome() {
+        let cached;
+        try { cached = JSON.parse(localStorage.getItem(HOME_CACHE_KEY) || 'null'); } catch { cached = null; }
+        const fresh = cached && Date.now() - Number(cached.savedAt) < 24 * 60 * 60 * 1000 && Array.isArray(cached.movies) && Array.isArray(cached.series);
+        state.movies = fresh ? cached.movies : starterItems('movie');
+        state.series = fresh ? cached.series : starterItems('series');
+        state.trending = weaveCollections(state.movies, state.series);
+        state.latestMovies = sortByLatest(state.movies);
+        state.topMovies = sortByRating(state.movies);
+        state.topSeries = sortByRating(state.series);
+        state.airingToday = sortByLatest(state.series);
+        renderHome(fresh ? 'Saved catalog · refreshing' : 'Ready · refreshing catalog', true);
+    }
+
+    function saveHomeCache() {
+        try {
+            localStorage.setItem(HOME_CACHE_KEY, JSON.stringify({
+                savedAt: Date.now(),
+                movies: state.movies.slice(0, 100),
+                series: state.series.slice(0, 100)
+            }));
+        } catch { /* The live catalog still works when browser storage is unavailable. */ }
+    }
+
+    function renderHome(label, allowRepeats = false) {
+        if (!state.trending.length) state.trending = weaveCollections(state.movies, state.series);
+        state.featured = state.movies.find((media) => media.backdrop_path && media.overview) ||
+            state.trending.find((media) => media.backdrop_path && media.overview) || state.movies[0] || state.series[0] || null;
+        const homeRows = allowRepeats ? {
+            trending: state.trending,
+            movies: state.movies,
+            latestMovies: state.latestMovies,
+            topMovies: state.topMovies,
+            series: state.series,
+            topSeries: state.topSeries,
+            airingToday: state.airingToday
+        } : buildUniqueHomeRows(state.featured ? [state.featured] : []);
+        renderHero(state.featured);
+        renderRail(elements.trendingRail, homeRows.trending);
+        renderRail(elements.moviesRail, homeRows.movies);
+        renderRail(elements.latestMoviesRail, homeRows.latestMovies);
+        renderRail(elements.topMoviesRail, homeRows.topMovies);
+        renderRail(elements.seriesRail, homeRows.series);
+        renderRail(elements.topSeriesRail, homeRows.topSeries);
+        renderRail(elements.airingTodayRail, homeRows.airingToday);
+        elements.catalogMode.textContent = label;
+    }
+
     async function loadHome() {
         try {
             const tmdbHealth = await api('/api/tmdb/health').catch(() => ({ tmdbKey: false }));
@@ -479,8 +547,8 @@
             } else {
                 try {
                     const [moviePages, seriesPages] = await Promise.all([
-                        Promise.all([0, 100, 200].map((skip) => api(`/api/addons/catalog/org.cvmturan.discovery/movie/top?skip=${skip}`))),
-                        Promise.all([0, 100, 200].map((skip) => api(`/api/addons/catalog/org.cvmturan.discovery/series/top?skip=${skip}`)))
+                        Promise.all([0].map((skip) => api(`/api/addons/catalog/org.cvmturan.discovery/movie/top?skip=${skip}`))),
+                        Promise.all([0].map((skip) => api(`/api/addons/catalog/org.cvmturan.discovery/series/top?skip=${skip}`)))
                     ]);
                     const discoveryAddon = {
                         id: 'org.cvmturan.discovery',
@@ -515,31 +583,11 @@
                 state.airingToday = sortByLatest(state.series);
             }
 
-            if (!state.trending.length) {
-                state.trending = weaveCollections(state.movies, state.series);
-            }
-
-            state.featured = state.movies.find((media) => media.backdrop_path && media.overview) ||
-                state.trending.find((media) => media.backdrop_path && media.overview) ||
-                state.movies[0] ||
-                state.series[0] ||
-                null;
-            const homeRows = buildUniqueHomeRows(state.featured ? [state.featured] : []);
-            renderHero(state.featured);
-            renderRail(elements.trendingRail, homeRows.trending);
-            renderRail(elements.moviesRail, homeRows.movies);
-            renderRail(elements.latestMoviesRail, homeRows.latestMovies);
-            renderRail(elements.topMoviesRail, homeRows.topMovies);
-            renderRail(elements.seriesRail, homeRows.series);
-            renderRail(elements.topSeriesRail, homeRows.topSeries);
-            renderRail(elements.airingTodayRail, homeRows.airingToday);
-            elements.catalogMode.textContent = catalogLabel;
+            renderHome(catalogLabel);
+            saveHomeCache();
         } catch (error) {
-            [elements.trendingRail, elements.moviesRail, elements.seriesRail, elements.latestMoviesRail,
-                elements.topMoviesRail, elements.topSeriesRail, elements.airingTodayRail]
-                .forEach((rail) => renderRail(rail, []));
-            elements.catalogMode.textContent = 'Catalog unavailable';
-            showToast(error.message || 'Could not load the catalog.', 'error');
+            elements.catalogMode.textContent = 'Saved catalog · live refresh unavailable';
+            if (!state.movies.length && !state.series.length) showToast(error.message || 'Could not load the catalog.', 'error');
         }
     }
 
@@ -3402,19 +3450,21 @@
 
     function updateClock() {
         const now = new Date();
+        const full = new Intl.DateTimeFormat(undefined, {
+            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit'
+        }).format(now);
         elements.headerClock.dateTime = now.toISOString();
-        elements.headerClock.textContent = new Intl.DateTimeFormat(undefined, {
+        elements.headerClock.replaceChildren(
+            makeElement('span', 'header-date', new Intl.DateTimeFormat(undefined, {
+                weekday: 'short', day: 'numeric', month: 'short'
+            }).format(now)),
+            makeElement('span', 'header-time', new Intl.DateTimeFormat(undefined, {
             hour: 'numeric',
             minute: '2-digit'
-        }).format(now);
-        elements.headerClock.title = new Intl.DateTimeFormat(undefined, {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit'
-        }).format(now);
+            }).format(now))
+        );
+        elements.headerClock.setAttribute('aria-label', full);
+        elements.headerClock.title = full;
     }
 
     function registerPWA() {
@@ -3581,3 +3631,4 @@
         return clientId;
     }
 })();
+
