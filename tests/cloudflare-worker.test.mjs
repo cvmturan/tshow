@@ -291,3 +291,12 @@ test('public metadata caching works without caching private add-on routes', asyn
   assert.equal(second.headers.get('x-tshow-edge-cache'), 'HIT');
   assert.equal(calls, 1);
 });
+
+test('opaque URLs and notWebReady hints reach the browser player', async () => {
+ const streams=[{url:'https://media.example/token',behaviorHints:{notWebReady:true}},{url:'https://media.example/video.mkv',behaviorHints:{notWebReady:true,proxyHeaders:{request:{}}}},{url:'https://media.example/video.mp4',behaviorHints:{proxyHeaders:{request:{Referer:'https://provider.example'}}}},{url:'https://media.example/archive.zip'},{externalUrl:'https://provider.example/donate'},{url:'http://media.example/video.mp4'}];
+ const request=new Request('https://showt.fun/api/addons/browser-result',{method:'POST',headers:{Origin:'https://showt.fun','X-TShow-Request':'1','Content-Type':'application/json'},body:JSON.stringify({manifestURL:'https://provider.example/manifest.json',manifest:{id:'test.video',name:'Video',resources:['stream'],types:['movie']},resource:'stream',data:{streams}})});
+ const body=await(await worker.fetch(request,env(),createContext())).json();
+ assert.deepEqual(body.streams.map(s=>s.browserReady),[true,true,false,false,false,false]);
+ assert.equal(body.streams[0].url,streams[0].url);
+ assert.equal(body.streams[1].playbackMode,'direct');
+});

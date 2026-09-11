@@ -488,9 +488,9 @@ test('user-added browser streams stay direct and never receive proxy or transcod
   assert.equal(withHeaders.url, null);
   assert.equal(withHeaders.playbackMode, 'external-player');
   assert.equal(withHeaders.requiresHeaders, true);
-  assert.equal(opaqueHttps.browserReady, false);
-  assert.equal(opaqueHttps.playbackMode, 'external-player');
-  assert.equal(opaqueHttps.attemptUrl, 'https://media.example.test/watch?id=opaque');
+  assert.equal(opaqueHttps.browserReady, true);
+  assert.equal(opaqueHttps.playbackMode, 'direct');
+  assert.equal(opaqueHttps.url, 'https://media.example.test/watch?id=opaque');
   assert.equal(opaqueHttps.transcodeUrl, null);
   assert.equal(opaqueHttps.transcodeLowUrl, null);
   assert.equal(torrent.browserReady, false);

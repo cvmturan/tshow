@@ -114,10 +114,13 @@ function streamShape(raw, addon, index) {
   const declared = String(raw.type || raw.mimeType || '').toLowerCase();
   const format = /m3u8$/.test(path) || /mpegurl|hls/.test(declared) ? 'hls' : /\.(mp4|m4v)$/.test(path) || /mp4/.test(declared) ? 'mp4' : /\.webm$/.test(path) || /webm/.test(declared) ? 'webm' : /\.mkv$/.test(path) || /matroska/.test(declared) ? 'mkv' : '';
   const hints = raw.behaviorHints && typeof raw.behaviorHints === 'object' ? raw.behaviorHints : {};
-  const headers = hints.proxyHeaders?.request;
+  const requestedHeaders = hints.proxyHeaders?.request;
+  const headers = requestedHeaders && typeof requestedHeaders === 'object' && Object.keys(requestedHeaders).length ? requestedHeaders : null;
   const notWebReady = hints.notWebReady === true;
-  const direct = Boolean(source && ['mp4', 'webm', 'hls'].includes(format) && source.startsWith('https:') && !headers && !notWebReady);
-  const attempt = Boolean(source && !format && source.startsWith('https:') && !headers && !notWebReady);
+  // notWebReady is advisory; let the browser determine actual codec support.
+  const nonVideo = /\.(?:html?|xhtml|zip|rar|7z|tar|gz|mpd)$/.test(path) || /text\/html|application\/(?:zip|x-rar|dash)/.test(declared);
+  const direct = Boolean(source && source.startsWith('https:') && !headers && !nonVideo);
+  const attempt = false;
   const mode = direct ? (format === 'hls' ? 'hls' : 'direct') : app ? 'external-app' : external ? 'external' : source ? 'external-player' : 'unsupported';
   const reportedBytes = [hints.videoSize, raw.sizeBytes, raw.size].map(Number).find((value) => Number.isFinite(value) && value > 0);
   const sizeBytes = reportedBytes || parseSizeHint(raw.name, raw.title, raw.description, hints.filename);

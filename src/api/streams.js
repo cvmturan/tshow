@@ -130,9 +130,9 @@ function normalizeStream(stream, addonId, addonName, originalIndex = 0, options 
   let attemptUrl = null;
 
   if (externalOnly && sourceURL) {
-    const directFormat = ['mp4', 'webm', 'hls'].includes(format);
+    const directFormat = !['archive', 'html', 'dash'].includes(format);
     const secureForPage = parsedURL?.protocol === 'https:';
-    if (directFormat && secureForPage && !headerPayload && !notWebReady) {
+    if (directFormat && secureForPage && !headerPayload) {
       browserReady = true;
       playbackMode = format === 'hls' ? 'hls' : 'direct';
     } else {
