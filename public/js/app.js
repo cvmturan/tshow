@@ -82,7 +82,6 @@
         dataSaver: false,
         installPrompt: null,
         addonFilter: 'all',
-        addonSearch: '',
         region: loadStoredRegion(),
         exploreItems: [],
         exploreFilter: 'all',
@@ -173,7 +172,14 @@
                 _addonCatalog: true
             } : { id: Number(titleId), media_type: titleType }, { fullPage: isFullTitle });
         }
-        if (!isFullTitle) await homeReady;
+        if (!isFullTitle) {
+            await homeReady;
+            const returnScroll = Number(sessionStorage.getItem('tshow:return-scroll'));
+            if (Number.isFinite(returnScroll) && returnScroll > 0) {
+                sessionStorage.removeItem('tshow:return-scroll');
+                requestAnimationFrame(() => window.scrollTo({ top: returnScroll, behavior: 'instant' }));
+            }
+        }
     }
 
     function cacheElements() {
@@ -238,7 +244,6 @@
             'refresh-addons',
             'addon-grid',
             'addon-filter-group',
-            'addon-search',
             'export-data-button',
             'import-data-button',
             'import-data-input',
@@ -289,6 +294,16 @@
     }
 
     function bindEvents() {
+        document.querySelector('.title-back-link')?.addEventListener('click', (event) => {
+            let sameSiteReferrer = false;
+            try {
+                sameSiteReferrer = Boolean(document.referrer) && new URL(document.referrer).origin === window.location.origin;
+            } catch {}
+            if (sameSiteReferrer && window.history.length > 1) {
+                event.preventDefault();
+                window.history.back();
+            }
+        });
         document.querySelectorAll('.nav-trigger, .nav-link').forEach((button) => {
             if (!button.dataset.view) return;
             button.addEventListener('click', () => {
@@ -345,10 +360,6 @@
             elements.addonFilterGroup.querySelectorAll('[data-addon-filter]').forEach((candidate) => {
                 candidate.classList.toggle('is-active', candidate === button);
             });
-            renderAddons();
-        });
-        elements.addonSearch?.addEventListener('input', () => {
-            state.addonSearch = elements.addonSearch.value.trim().toLocaleLowerCase();
             renderAddons();
         });
 
@@ -1153,6 +1164,7 @@
         if (titleURL && !fullPage) {
             const fullPageLink = makeElement('a', 'button button-quiet', 'Full page');
             fullPageLink.href = `${titleURL}?country=${encodeURIComponent(state.region)}`;
+            fullPageLink.addEventListener('click', () => sessionStorage.setItem('tshow:return-scroll', String(window.scrollY)));
             actions.append(fullPageLink);
         }
         main.append(actions);
@@ -3048,8 +3060,7 @@
                 (state.addonFilter === 'catalog' && (resources.has('catalog') || addon.catalogs?.length)) ||
                 (state.addonFilter === 'stream' && resources.has('stream')) ||
                 (state.addonFilter === 'subtitles' && resources.has('subtitles'));
-            const searchText = `${addon.name || ''} ${addon.description || ''} ${addon.id || ''}`.toLocaleLowerCase();
-            return filterMatches && (!state.addonSearch || searchText.includes(state.addonSearch));
+            return filterMatches;
         });
 
         const cards = visibleAddons.map((addon) => {
