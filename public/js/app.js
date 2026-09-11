@@ -1860,24 +1860,36 @@
         }
     }
 
-    function openActiveStreamInVlc() {
+    async function openActiveStreamInVlc() {
         const url = activeExternalPlayerURL();
         if (!url) return showToast('This source has no direct external-player link.', 'warning');
-        if (!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-            const blob = new Blob(['#EXTM3U\n' + url.replace(/[\r\n]/g, '') + '\n'], { type: 'audio/x-mpegurl' });
-            const playlist = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = playlist; link.download = 'TShow-play-in-VLC.m3u'; link.click();
-            setTimeout(() => URL.revokeObjectURL(playlist), 30000);
-            showToast('Playlist downloaded. Open it with VLC. Or choose Copy link, then VLC → Media → Open Network Stream (Ctrl+N).', 'info');
+        if (window.tshowDesktop?.isDesktop && typeof window.tshowDesktop.play === 'function') {
+            elements.openInVlc.disabled = true;
+            try {
+                const stream = state.streams[state.activeStreamIndex];
+                const result = await window.tshowDesktop.play({
+                    url,
+                    title: stream?._displayTitle || stream?.title || stream?.name || elements.playerTitle.textContent || 'TShow',
+                    behaviorHints: stream?.behaviorHints || {},
+                    preferredPlayer: 'vlc'
+                });
+                if (!result?.ok) throw new Error(result?.error || 'VLC could not be opened.');
+                showToast('Opened directly in VLC.', 'info');
+            } catch (error) {
+                showToast(error.message || 'VLC could not be opened.', 'error');
+            } finally {
+                elements.openInVlc.disabled = false;
+            }
             return;
         }
         window.location.href = /Android/i.test(navigator.userAgent)
             ? 'intent:' + url.slice(url.indexOf(':') + 1) + '#Intent;scheme=' + new URL(url).protocol.replace(':', '') + ';package=org.videolan.vlc;end'
-            : 'vlc-x-callback://x-callback-url/stream?url=' + encodeURIComponent(url);
+            : /iPhone|iPad|iPod/i.test(navigator.userAgent)
+                ? 'vlc-x-callback://x-callback-url/stream?url=' + encodeURIComponent(url)
+                : 'vlc://' + url;
         setTimeout(() => {
-            showToast('If VLC did not open, install VLC or try Outplayer.', 'info');
-        }, 800);
+            showToast('VLC was requested directly. If Windows did not open it, install the TShow Desktop player or register VLC links once.', 'info');
+        }, 1000);
     }
 
     function openActiveStreamInOutplayer() {

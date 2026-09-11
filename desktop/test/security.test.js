@@ -42,6 +42,17 @@ test('public HTTPS media URLs and safe playback headers are preserved', async ()
   });
 });
 
+test('the desktop bridge accepts only the VLC player preference', async () => {
+  const vlc = await preparePlaybackRequest({
+    url: 'https://media.example/video.mp4', preferredPlayer: 'vlc'
+  }, publicLookup);
+  const unknown = await preparePlaybackRequest({
+    url: 'https://media.example/video.mp4', preferredPlayer: 'powershell'
+  }, publicLookup);
+  assert.equal(vlc.preferredPlayer, 'vlc');
+  assert.equal(unknown.preferredPlayer, null);
+});
+
 test('unsafe headers and embedded credentials are rejected', async () => {
   assert.deepEqual(sanitizePlaybackHeaders({
     headers: { Referer: 'https://safe.example/\r\nX-Bad: yes', 'X-Test': 'no' }

@@ -105,7 +105,8 @@ async function preparePlaybackRequest(payload, lookup) {
   return {
     url: await validatePlaybackURL(payload.url, lookup),
     title: cleanHeaderValue(payload.title)?.slice(0, 180) || 'TShow',
-    headers: sanitizePlaybackHeaders(payload)
+    headers: sanitizePlaybackHeaders(payload),
+    preferredPlayer: payload.preferredPlayer === 'vlc' ? 'vlc' : null
   };
 }
 

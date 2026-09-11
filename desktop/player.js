@@ -73,14 +73,18 @@ async function locateOnPath(command, platform = process.platform) {
   }
 }
 
-async function findPlayer(platform = process.platform, env = process.env, resourcesPath) {
-  const bundled = bundledPlayerPath(resourcesPath, platform);
+async function findPlayer(platform = process.platform, env = process.env, resourcesPath, preferredPlayer = null) {
+  const bundled = preferredPlayer === 'vlc' ? null : bundledPlayerPath(resourcesPath, platform);
   if (bundled && fs.existsSync(bundled)) {
     return { executable: bundled, kind: 'mpv', bundled: true };
   }
-  const known = knownPlayerPaths(platform, env).find((candidate) => fs.existsSync(candidate));
+  const known = knownPlayerPaths(platform, env).find((candidate) =>
+    fs.existsSync(candidate) && (!preferredPlayer || playerKind(candidate) === preferredPlayer)
+  );
   if (known) return { executable: known, kind: playerKind(known), bundled: false };
-  const names = platform === 'win32' ? ['mpv.exe', 'vlc.exe'] : ['mpv', 'vlc'];
+  const names = preferredPlayer === 'vlc'
+    ? (platform === 'win32' ? ['vlc.exe'] : ['vlc'])
+    : (platform === 'win32' ? ['mpv.exe', 'vlc.exe'] : ['mpv', 'vlc']);
   for (const name of names) {
     const executable = await locateOnPath(name, platform);
     if (executable) return { executable, kind: playerKind(executable), bundled: false };
@@ -92,9 +96,12 @@ async function launchPlayer(request, dependencies = {}) {
   const player = await (dependencies.findPlayer || findPlayer)(
     dependencies.platform || process.platform,
     dependencies.env || process.env,
-    dependencies.resourcesPath
+    dependencies.resourcesPath,
+    request.preferredPlayer
   );
-  if (!player) throw new Error('The TShow playback engine is missing. Reinstall the latest TShow Desktop build.');
+  if (!player) throw new Error(request.preferredPlayer === 'vlc'
+    ? 'VLC is not installed in a standard location on this computer.'
+    : 'The TShow playback engine is missing. Reinstall the latest TShow Desktop build.');
   const spawnProcess = dependencies.spawn || spawn;
   const child = spawnProcess(player.executable, playerArguments(player.kind, request), {
     detached: true,
