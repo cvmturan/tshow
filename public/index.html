@@ -21,12 +21,12 @@
     <link rel="icon" href="/assets/tshow-icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="/assets/tshow-icon-192.png">
     <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="stylesheet" href="/css/main.css?v=20260911-2">
+    <link rel="stylesheet" href="/css/main.css?v=20260911-4">
     <script src="/vendor/hls/hls.min.js" defer></script>
-    <link rel="stylesheet" href="/css/accounts.css?v=20260911-2">
-    <script src="/js/accounts.js?v=20260911-2" defer></script>
-    <script src="/js/cloudflare-context.js?v=20260911-2" defer></script>
-    <script src="/js/app.js?v=20260911-2" defer></script>
+    <link rel="stylesheet" href="/css/accounts.css?v=20260911-3">
+    <script src="/js/accounts.js?v=20260911-3" defer></script>
+    <script src="/js/cloudflare-context.js?v=20260911-3" defer></script>
+    <script src="/js/app.js?v=20260911-4" defer></script>
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"TShow","url":"https://showt.fun/","logo":"https://showt.fun/assets/tshow-icon-512.png","email":"support@showt.fun"}</script>
 </head>
 <body>
@@ -96,6 +96,11 @@
     </header>
 
     <main id="main-content">
+        <section class="view title-detail-view" id="title-detail-view" aria-labelledby="details-title" hidden>
+            <a class="title-back-link" href="/" aria-label="Back to browse">← Back to browse</a>
+            <div id="title-detail-content"></div>
+        </section>
+
         <section class="view home-view" id="home-view" data-view-panel="home">
             <section class="hero" id="hero" aria-labelledby="hero-title">
                 <div class="hero-art" id="hero-art" aria-hidden="true"></div>
@@ -489,7 +494,8 @@
                     </select>
                 </section>
                 <section class="settings-card">
-                    <div><p class="section-kicker">Privacy</p><h2>Stored in this browser</h2><p>Your region, list, history and add-on choices remain local to this browser. TShow has no user-profile database.</p></div>
+                    <div><p class="section-kicker">Automatic saving</p><h2>Your settings are protected</h2><p id="settings-storage-description">Your region, list, history, player preferences and add-ons are saved automatically in this browser.</p></div>
+                    <p class="settings-save-state" id="settings-save-state" role="status">Guest mode · saved in this browser</p>
                     <a class="button button-quiet" href="/legal.html#privacy">Read privacy policy</a>
                 </section>
             </div>

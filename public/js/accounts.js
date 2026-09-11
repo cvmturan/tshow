@@ -2,7 +2,12 @@
     'use strict';
     const names = { watchlist: 'streamflix:watchlist:v1', continueWatching: 'streamflix:continue:v1', recentlyViewed: 'tshow:recent:v1', addonURLs: 'streamflix:addons:v1', region: 'tshow:region:v1', playerPreferences: 'tshow:player:v1' };
     let user = null, config = {}, versions = {}, pending = new Map(), saving = false, timer, blocked = false;
-    const status = text => { const el = document.getElementById('account-sync-status'); if (el) el.textContent = text; };
+    const status = text => {
+        for (const id of ['account-sync-status', 'settings-save-state']) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = text;
+        }
+    };
     const keyFor = key => user
         ? `tshow:user:${user.id}:${Object.hasOwn(names, key) ? key : `local:${key}`}`
         : (names[key] || key);
@@ -93,6 +98,10 @@
         document.getElementById('account-member').hidden = !user;
         document.getElementById('account-button').textContent = user ? user.name.split(' ')[0] : 'Sign in';
         document.getElementById('account-identity').textContent = user ? `${user.name} · ${user.email}` : '';
+        const storageDescription = document.getElementById('settings-storage-description');
+        if (storageDescription) storageDescription.textContent = user
+            ? 'Changes save instantly on this device, then sync to your TShow account for your other devices.'
+            : 'Your region, list, history, player preferences and add-ons save automatically in this browser.';
         for (const provider of ['google', 'apple']) {
             const button = document.getElementById(`account-${provider}`);
             button.disabled = !config[provider];
@@ -217,7 +226,6 @@
     })();
     window.TShowAccount = { ready, storageKey: keyFor, save, flush, get user() { return user; } };
     window.addEventListener('online', () => { void flush(); });
-    window.addEventListener('beforeunload', event => { if (pending.size) { event.preventDefault(); event.returnValue = ''; } });
+    window.addEventListener('pagehide', () => { if (pending.size) void flush(); });
     setInterval(() => { if (pending.size) void flush(); }, 30000);
 })();
-

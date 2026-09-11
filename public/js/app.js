@@ -109,6 +109,7 @@
         renderRecentlyViewed();
         restoreFastHome();
         updateClock();
+        setupHeroScroll();
         window.setInterval(updateClock, 30_000);
         registerPWA();
         const installRailControls = () => document.querySelectorAll('.media-rail').forEach(rail => {
@@ -139,23 +140,27 @@
         const addonNotice = document.getElementById('addon-account-notice');
         if (addonNotice) addonNotice.hidden = Boolean(window.TShowAccount?.user);
 
-        const homeReady = Promise.all([
-            loadHome(),
-            initializeAddons()
-        ]);
-
-        const requestedView = new URLSearchParams(window.location.search).get('view');
-        const browsePath = window.location.pathname.replace(/\/$/, '');
-        if (browsePath === '/movies') showBrowseView('movie');
-        if (browsePath === '/series') showBrowseView('tv');
-        if (['home', 'explore', 'list', 'calendar', 'history', 'addons', 'settings', 'help'].includes(requestedView)) setView(requestedView);
-        const requestedTitle = new URLSearchParams(window.location.search).get('title');
+        const searchParams = new URLSearchParams(window.location.search);
+        const requestedView = searchParams.get('view');
+        const requestedTitle = searchParams.get('title');
         const titleMatch = String(requestedTitle || '').match(/^(movie|tv):(\d{1,12}|tt\d{5,12})$/i);
+        const isFullTitle = Boolean(titleMatch && searchParams.get('full') === '1');
+        const homeReady = isFullTitle ? initializeAddons() : Promise.all([loadHome(), initializeAddons()]);
+
+        const browsePath = window.location.pathname.replace(/\/$/, '');
+        if (!isFullTitle && browsePath === '/movies') showBrowseView('movie');
+        if (!isFullTitle && browsePath === '/series') showBrowseView('tv');
+        if (!isFullTitle && ['home', 'explore', 'list', 'calendar', 'history', 'addons', 'settings', 'help'].includes(requestedView)) setView(requestedView);
         if (titleMatch) {
-            elements.detailsDialog.classList.toggle('details-full-page', new URLSearchParams(location.search).get('full') === '1');
+            if (isFullTitle) {
+                state.titlePageActive = true;
+                document.querySelectorAll('[data-view-panel]').forEach(panel => { panel.hidden = true; });
+                elements.titleDetailView.hidden = false;
+                await homeReady;
+            }
             const titleType = titleMatch[1].toLowerCase();
             const titleId = titleMatch[2];
-            openDetails(/^tt/i.test(titleId) ? {
+            await openDetails(/^tt/i.test(titleId) ? {
                 id: titleId,
                 imdb_id: titleId,
                 media_type: titleType,
@@ -164,9 +169,9 @@
                 _sourceAddonId: 'org.streamflix.cinemeta',
                 _sourceAddonName: 'Cinemeta Search & Metadata',
                 _addonCatalog: true
-            } : { id: Number(titleId), media_type: titleType });
+            } : { id: Number(titleId), media_type: titleType }, { fullPage: isFullTitle });
         }
-        await homeReady;
+        if (!isFullTitle) await homeReady;
     }
 
     function cacheElements() {
@@ -188,6 +193,8 @@
             'hero-overview',
             'hero-play',
             'hero-info',
+            'title-detail-view',
+            'title-detail-content',
             'catalog-mode',
             'continue-section',
             'continue-rail',
@@ -411,11 +418,6 @@
         elements.detailsClose.addEventListener('click', () => elements.detailsDialog.close());
         elements.detailsDialog.addEventListener('close', () => {
             state.detailsRequest = (state.detailsRequest || 0) + 1;
-            if (elements.detailsDialog.classList.contains('details-full-page')) {
-                elements.detailsDialog.classList.remove('details-full-page');
-                history.replaceState(null, '', '/');
-                document.title = 'TShow · Movies, series and trailers';
-            }
         });
         elements.playerClose.addEventListener('click', () => elements.playerDialog.close());
         elements.playerFullscreen.addEventListener('click', togglePlayerFullscreen);
@@ -847,16 +849,22 @@
         return card;
     }
 
-    async function openDetails(media) {
+    async function openDetails(media, { fullPage = Boolean(state.titlePageActive) } = {}) {
         const requestId = state.detailsRequest = (state.detailsRequest || 0) + 1;
+        const detailTarget = fullPage ? elements.titleDetailContent : elements.detailsContent;
         const loading = makeElement('div', 'details-status');
         const loadingTitle = makeElement('h2', '', 'Loading title…');
         loadingTitle.id = 'details-title';
         loading.append(loadingTitle, makeElement('p', '', 'Getting the story, episodes and watch options.'));
         loading.setAttribute('role', 'status');
-        elements.detailsContent.replaceChildren(loading);
-        openDialog(elements.detailsDialog);
-        elements.detailsDialog.scrollTop = 0;
+        detailTarget.replaceChildren(loading);
+        if (fullPage) {
+            elements.titleDetailView.hidden = false;
+            window.scrollTo({ top: 0, behavior: 'instant' });
+        } else {
+            openDialog(elements.detailsDialog);
+            elements.detailsDialog.scrollTop = 0;
+        }
         let activeMedia, activeDetails;
         const type = mediaType(media);
 
@@ -914,10 +922,10 @@
             if (requestId !== state.detailsRequest) return;
             state.activeMedia = activeMedia;
             state.activeDetails = activeDetails;
-            renderDetails(activeMedia, activeDetails);
-            if (elements.detailsDialog.classList.contains('details-full-page')) document.title = `${mediaTitle(activeMedia)} · TShow`;
+            renderDetails(activeMedia, activeDetails, detailTarget, fullPage);
+            if (fullPage) document.title = `${mediaTitle(activeMedia)} · TShow`;
             rememberRecentlyViewed(activeMedia);
-            openDialog(elements.detailsDialog);
+            if (!fullPage) openDialog(elements.detailsDialog);
         } catch (error) {
             if (requestId !== state.detailsRequest) return;
             loadingTitle.textContent = 'This title could not load';
@@ -1029,7 +1037,7 @@
             }));
     }
 
-    function renderDetails(media, details) {
+    function renderDetails(media, details, detailTarget = elements.detailsContent, fullPage = false) {
         const title = mediaTitle(media);
         const type = mediaType(media);
         const year = mediaYear(media);
@@ -1140,10 +1148,9 @@
 
         actions.append(playButton, trailerButton, listButton, shareButton);
         const titleURL = publicTitleURL(media);
-        if (titleURL && !elements.detailsDialog.classList.contains('details-full-page')) {
+        if (titleURL && !fullPage) {
             const fullPageLink = makeElement('a', 'button button-quiet', 'Full page');
-            const stableId = titleURL.split('/')[2];
-            fullPageLink.href = `/?title=${encodeURIComponent(`${type}:${stableId}`)}&full=1`;
+            fullPageLink.href = `${titleURL}?country=${encodeURIComponent(state.region)}`;
             actions.append(fullPageLink);
         }
         main.append(actions);
@@ -1182,7 +1189,7 @@
             section.append(rail);
             extras.append(section);
         }
-        elements.detailsContent.replaceChildren(backdrop, layout, extras);
+        detailTarget.replaceChildren(backdrop, layout, extras);
     }
 
     function createWatchProviderSection(data) {
@@ -3516,6 +3523,31 @@
         elements.menuButton.setAttribute('aria-label', 'Open menu');
         elements.siteSidebar.setAttribute('aria-hidden', 'true');
         elements.sidebarScrim.setAttribute('aria-hidden', 'true');
+    }
+
+    function setupHeroScroll() {
+        if (!elements.hero || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        let scheduled = false;
+        const update = () => {
+            scheduled = false;
+            const progress = Math.min(1, Math.max(0, window.scrollY / Math.max(1, elements.hero.offsetHeight * 0.72)));
+            elements.hero.style.setProperty('--hero-scroll', progress.toFixed(3));
+            const content = elements.hero.querySelector('.hero-content');
+            if (content) {
+                content.style.setProperty('transform', `translate3d(0, ${Math.round(progress * 22)}px, 0)`, 'important');
+                content.style.setProperty('opacity', String(1 - progress * 0.34), 'important');
+            }
+            if (elements.heroArt) {
+                elements.heroArt.style.transform = `translate3d(0, ${Math.round(progress * 10)}px, 0) scale(${(1.025 + progress * 0.035).toFixed(3)})`;
+            }
+        };
+        window.addEventListener('scroll', () => {
+            if (!scheduled) {
+                scheduled = true;
+                requestAnimationFrame(update);
+            }
+        }, { passive: true });
+        update();
     }
 
     function updateClock() {
