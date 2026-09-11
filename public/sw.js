@@ -1,6 +1,6 @@
 'use strict';
 
-const SHELL_CACHE = 'tshow-shell-v19';
+const SHELL_CACHE = 'tshow-shell-v20';
 const SHELL_FILES = [
   '/',
   '/index.html',
@@ -8,7 +8,10 @@ const SHELL_FILES = [
   '/js/accounts.js?v=20260911-1',
   '/css/accounts.css?v=20260911-1',
   '/css/main.css?v=20260911-1',
+  '/css/premium.css?v=20260911-2',
+  '/css/premium-fixes.css?v=20260911-2',
   '/js/cloudflare-context.js?v=20260911-1',
+  '/js/premium-ui.js?v=20260911-2',
   '/js/app.js?v=20260911-1',
   '/manifest.webmanifest',
   '/assets/tshow-logo.png',
@@ -17,7 +20,13 @@ const SHELL_FILES = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_FILES)));
+  event.waitUntil(
+    caches.open(SHELL_CACHE).then((cache) => Promise.all(SHELL_FILES.map(async (url) => {
+      const response = await fetch(new Request(url, { cache: 'reload' }));
+      if (!response.ok) throw new Error(`Could not cache ${url}`);
+      await cache.put(url, response);
+    })))
+  );
   self.skipWaiting();
 });
 
@@ -62,4 +71,3 @@ self.addEventListener('fetch', (event) => {
     }))
   );
 });
-
