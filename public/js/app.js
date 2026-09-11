@@ -63,6 +63,7 @@
         visibleStreamIndexes: [],
         activeStreamIndex: null,
         playerRequest: 0,
+        playerRequestKey: null,
         hlsPlayer: null,
         activeExternalURL: null,
         activeExternalAppURL: null,
@@ -1441,6 +1442,7 @@
     async function playMedia(media, details = null, requestedVideoId = null) {
         const requestId = ++state.playerRequest;
         const selectedVideoId = requestedVideoId || state.activeVideoId || null;
+        state.playerRequestKey = `pending:${requestId}`;
         resetTrailerFrame();
         state.playerMedia = serializeMedia(media);
         elements.playerTitle.textContent = mediaTitle(media);
@@ -1490,13 +1492,16 @@
             if (streamType === 'series' && !selectedVideoId) {
                 throw new Error('Choose a series episode before opening the player.');
             }
+            const requestKey = `${streamType}:${streamId}:${requestId}`;
+            state.playerRequestKey = requestKey;
             const result = await api(`/api/streams/${streamType}/${encodeURIComponent(streamId)}`);
             if (requestId !== state.playerRequest) return;
             state.streams = Array.isArray(result.streams)
                 ? result.streams.filter((stream) =>
                     stream &&
-                    (stream.url || stream.externalUrl || stream.attemptUrl || stream.unsupportedReason)
-                )
+                    (stream.url || stream.externalUrl || stream.externalPlayerUrl || stream.externalAppUrl || stream.unsupportedReason) &&
+                    !(stream.attemptUrl && !stream.browserReady && !stream.externalUrl && !stream.externalPlayerUrl && !stream.externalAppUrl)
+                ).map((stream) => ({ ...stream, _requestKey: requestKey, _displayTitle: mediaTitle(media) }))
                 : [];
 
             if (!state.streams.length) {
@@ -1529,9 +1534,7 @@
 
     function streamCompatibilityGroup(stream) {
         if (stream.isDemo) return 'demo';
-        if (stream.playbackMode === 'proxy' && stream.transcodeLowUrl) return 'try';
         if (stream.browserReady) return 'playable';
-        if (stream.attemptUrl) return 'try';
         if (stream.externalUrl || stream.externalPlayerUrl || stream.externalAppUrl) return 'external';
         return 'app-only';
     }
@@ -1565,7 +1568,6 @@
         const counts = {
             all: state.streams.length,
             playable: 0,
-            try: 0,
             external: 0,
             'app-only': 0,
             demo: 0
@@ -1602,7 +1604,6 @@
 
         const groups = [
             ['playable', 'Plays in this browser'],
-            ['try', 'Direct browser test'],
             ['external', 'External apps and provider links'],
             ['app-only', 'App-only or download sources'],
             ['demo', 'Player test — not the selected title']
@@ -1650,14 +1651,13 @@
         elements.streamSelect.disabled = state.visibleStreamIndexes.length === 0;
 
         elements.sourceSummary.textContent =
-            `${counts.all} entries: ${counts.playable} play here, ${counts.try} direct browser tests, ` +
-            `${counts.external} external sources, ${counts['app-only']} app-only, ${counts.demo} player test.`;
+            `${counts.all} entries for ${mediaTitle(state.playerMedia)}: ${counts.playable} play here, ` +
+            `${counts.external} provider links, ${counts['app-only']} app-only, ${counts.demo} player test.`;
         elements.sourceCompatibilityHelp.textContent = sourceFilterHelp(state.sourceFilter);
     }
 
     function sourceFilterHelp(filter) {
         if (filter === 'playable') return 'Direct MP4, WebM, or HLS sources. User-added video connects from its provider straight to your browser.';
-        if (filter === 'try') return 'These smaller sources are forwarded unchanged. They play only when their original format and codec are supported by the device.';
         if (filter === 'external') return 'User-added sources open directly in external players, source apps, or provider pages. Their video never passes through TShow.';
         if (filter === 'app-only') return 'These are downloads, redirects, torrents, or unknown formats intended for another app.';
         if (filter === 'demo') return 'The short CC0 flower video only tests the player. It is not the movie or episode you selected.';
@@ -1665,19 +1665,19 @@
     }
 
     function streamOptionLabel(stream, index, mirrorNumber = 1, mirrorTotal = 1) {
+        const selectedTitle = stream._displayTitle || mediaTitle(state.playerMedia) || 'Selected title';
+        const size = stream.sizeLabel || 'size unknown';
         if (stream.isDemo) {
-            return `${stream.title || stream.name || 'Public sample'} · player test, not this title`;
+            return `${selectedTitle} · ${stream.title || stream.name || 'Public sample'} · ${size} · player test only`;
         }
 
         const name = stream.name || stream.title || `Source ${index + 1}`;
-        const badges = [];
-        if (stream.sizeLabel) badges.push(stream.sizeLabel);
+        const badges = [size];
         if (stream.playbackMode === 'proxy' && stream.transcodeLowUrl) {
             badges.push('proxied link');
         } else if (stream.browserReady) {
             badges.push(stream.format ? stream.format.toUpperCase() : 'plays here');
         }
-        if (stream.attemptUrl) badges.push(`${stream.format ? stream.format.toUpperCase() : 'stream'} · manual try`);
         if (stream.externalPlayerUrl && !stream.browserReady) badges.push('external player');
         if (stream.externalAppUrl && !stream.browserReady) badges.push('source app');
         if (stream.externalUrl && !stream.browserReady) badges.push('provider link');
@@ -1685,7 +1685,7 @@
             badges.push(stream.format ? `${stream.format.toUpperCase()} · app-only` : 'app-only · format unknown');
         }
         if (mirrorTotal > 1) badges.push(`mirror ${mirrorNumber}`);
-        return badges.length ? `${name} · ${badges.join(' · ')}` : name;
+        return `${selectedTitle} · ${name} · ${badges.join(' · ')}`;
     }
 
     function showSourceOverview(media) {
@@ -1708,7 +1708,7 @@
 
     function applyStream(index, { forceAttempt = false } = {}) {
         let stream = state.streams[index];
-        if (!stream) return;
+        if (!stream || stream._requestKey !== state.playerRequestKey) return;
         state.activeStreamIndex = index;
         if (forceAttempt && isSafeWebURL(stream.attemptUrl)) {
             stream = {
@@ -2234,6 +2234,7 @@
 
     function closePlayer() {
         state.playerRequest += 1;
+        state.playerRequestKey = null;
         savePlaybackProgress(true);
         clearVideoElement();
         resetTrailerFrame();

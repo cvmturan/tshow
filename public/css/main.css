@@ -3745,7 +3745,7 @@ body:not(.legal-page) .site-header .header-clock { grid-column: 4; justify-self:
 .hero { --hero-scroll: 0; min-height: clamp(560px, 76vh, 780px); padding-bottom: 52px; border-bottom: 0; }
 .hero::after { position: absolute; z-index: -1; right: 0; bottom: -2px; left: 0; height: 180px; background: linear-gradient(180deg, transparent, rgba(9,11,16,.76) 55%, #090b10 100%); content: ""; pointer-events: none; }
 .hero-content { min-width: 0; animation: none; transition: transform 100ms linear, opacity 100ms linear; will-change: transform, opacity; }
-.hero-art { will-change: transform; }
+.hero-art { transition: opacity 500ms ease, transform 140ms linear; will-change: transform; }
 .hero h1, .details-main h2 { overflow-wrap: anywhere; }
 .catalog-shell { margin-top: -1px; padding-top: 28px; background: radial-gradient(circle at 10% 0, rgba(255,79,69,.055), transparent 30rem); }
 .catalog-section:first-child { margin-top: 0; }
@@ -3763,11 +3763,15 @@ body:not(.legal-page) .site-header .header-clock { grid-column: 4; justify-self:
 .media-dialog { overscroll-behavior: contain; }
 .details-poster { align-self: start; }
 @media (prefers-reduced-motion: no-preference) {
+    body:not(.legal-page) [data-view-panel]:not([hidden]) { animation: view-enter 260ms cubic-bezier(.2,.75,.2,1) both; }
+    .media-card, .addon-card, .settings-card, .history-card, .calendar-card, .empty-state { transition: transform 200ms cubic-bezier(.2,.75,.2,1), opacity 200ms ease, border-color 200ms ease, box-shadow 200ms ease; }
+    button:active:not(:disabled), a.button:active, .nav-link:active, .title-back-link:active { transform: scale(.97); }
     .media-dialog[open] { animation: detail-arrive 180ms ease-out; }
     .button { transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
     .button:hover:not(:disabled) { transform: translateY(-1px); }
     @keyframes detail-arrive { from { opacity: .4; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes title-page-arrive { from { opacity: .25; } to { opacity: 1; } }
+    @keyframes view-enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 }
 @media (max-width: 600px) {
     .hero { min-height: 600px; padding-bottom: 36px; }

@@ -1,7 +1,7 @@
 (() => {
     'use strict';
     const names = { watchlist: 'streamflix:watchlist:v1', continueWatching: 'streamflix:continue:v1', recentlyViewed: 'tshow:recent:v1', addonURLs: 'streamflix:addons:v1', region: 'tshow:region:v1', playerPreferences: 'tshow:player:v1' };
-    let user = null, config = {}, versions = {}, pending = new Map(), saving = false, timer, blocked = false;
+    let user = null, config = {}, versions = {}, pending = new Map(), saving = false, flushPromise = null, timer, blocked = false;
     const status = text => {
         for (const id of ['account-sync-status', 'settings-save-state']) {
             const el = document.getElementById(id);
@@ -33,22 +33,26 @@
         if (!user) return;
         try { localStorage.setItem(`tshow:pending:${user.id}`, JSON.stringify({ versions, entries: [...pending] })); } catch { /* Save status still reports pending changes. */ }
     }
-    async function flush() {
-        if (saving || blocked || !user || !pending.size) return;
+    function flush() {
+        if (flushPromise) return flushPromise;
+        if (blocked || !user || !pending.size) return Promise.resolve();
         saving = true;
-        try {
-            while (pending.size) {
-                const [key, value] = pending.entries().next().value;
-                const result = await request(`/api/account/data/${key}`, { method: 'PUT', body: JSON.stringify({ value, version: versions[key] || 0 }) });
-                versions[key] = result.version;
-                if (pending.get(key) === value) pending.delete(key);
-                persistPending();
+        flushPromise = (async () => {
+            try {
+                while (pending.size) {
+                    const [key, value] = pending.entries().next().value;
+                    const result = await request(`/api/account/data/${key}`, { method: 'PUT', body: JSON.stringify({ value, version: versions[key] || 0 }) });
+                    versions[key] = result.version;
+                    if (pending.get(key) === value) pending.delete(key);
+                    persistPending();
+                }
+                status('All changes saved to your account');
+            } catch (e) {
+                if (e.status === 409 || e.status === 401) blocked = true;
+                status(e.status === 409 ? 'Sync conflict — your device copy is protected.' : e.status === 401 ? 'Session expired — your device copy is protected.' : 'Offline — changes are saved on this device and will sync later.');
             }
-            status('All changes saved to your account');
-        } catch (e) {
-            if (e.status === 409 || e.status === 401) blocked = true;
-            status(e.status === 409 ? 'Sync conflict — open Account to save a backup and resolve.' : e.status === 401 ? 'Session expired — export unsaved changes in Account before signing in.' : 'Offline or sync unavailable — changes are saved on this device.');
-        } finally { saving = false; }
+        })().finally(() => { saving = false; flushPromise = null; });
+        return flushPromise;
     }
     function exportData(local = false) {
         const download = data => {
@@ -183,9 +187,10 @@
         });
         const logout = async all => {
             await flush();
-            if (pending.size) throw new Error('Some changes are not synced. Export a backup and resolve them before signing out.');
+            if (pending.size) persistPending();
             await request(all ? '/api/account/sessions' : '/api/auth/logout', { method: all ? 'DELETE' : 'POST', body: '{}' });
-            clearAccountCache(); location.reload();
+            if (!pending.size) clearAccountCache();
+            location.reload();
         };
         act('account-logout', () => logout(false)); act('account-logout-all', () => logout(true));
         document.getElementById('account-delete-form').addEventListener('submit', async event => {
