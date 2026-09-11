@@ -206,3 +206,11 @@
     };
 })();
 
+// Keep visual and interaction polish isolated from the core catalog/add-on runtime.
+(() => {
+    if (document.querySelector('script[data-tshow-premium-ui]')) return;
+    const script = document.createElement('script');
+    script.src = '/js/premium-ui.js?v=20260911-2';
+    script.dataset.tshowPremiumUi = 'true';
+    document.head.append(script);
+})();
