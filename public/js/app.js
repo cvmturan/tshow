@@ -1138,7 +1138,7 @@
         playButton.type = 'button';
         playButton.append(makeElement('span', 'play-icon'), document.createTextNode('Watch options'));
         playButton.disabled = type === 'tv' && !state.activeVideoId;
-        playButton.addEventListener('click', () => playMedia(media, details, state.activeVideoId));
+        playButton.addEventListener('click', () => playMedia(media, details, type === 'tv' ? main.querySelector('[data-episode-picker]')?.value : null));
 
         const trailerButton = makeElement('button', 'button button-secondary', 'Watch trailer');
         trailerButton.type = 'button';
@@ -1303,6 +1303,7 @@
         const episodeLabel = makeElement('label', '', 'Episode');
         const seasonSelect = document.createElement('select');
         const episodeSelect = document.createElement('select');
+        episodeSelect.dataset.episodePicker = 'true';
         const seasons = [...new Set(videos.map((video) => video.season))];
 
         seasons.forEach((season) => {
@@ -1372,6 +1373,7 @@
         const episodeLabel = makeElement('label', '', 'Episode');
         const seasonSelect = document.createElement('select');
         const episodeSelect = document.createElement('select');
+        episodeSelect.dataset.episodePicker = 'true';
         for (const season of seasons) {
             seasonSelect.append(makeOption(
                 String(season.number),
@@ -1453,7 +1455,7 @@
 
     async function playMedia(media, details = null, requestedVideoId = null) {
         const requestId = ++state.playerRequest;
-        const selectedVideoId = requestedVideoId || state.activeVideoId || null;
+        const selectedVideoId = mediaType(media) === 'movie' ? null : (requestedVideoId || null);
         state.playerRequestKey = `pending:${requestId}`;
         resetTrailerFrame();
         state.playerMedia = serializeMedia(media);
@@ -1496,7 +1498,7 @@
 
             const streamType = mediaType(media) === 'movie' ? 'movie' : 'series';
             const streamId = selectedVideoId ||
-                resolvedDetails.behaviorHints?.defaultVideoId ||
+                (streamType === 'movie' ? null : resolvedDetails.behaviorHints?.defaultVideoId) ||
                 resolvedDetails.external_ids?.imdb_id ||
                 resolvedDetails.imdb_id ||
                 media._stremioId ||
@@ -1946,6 +1948,7 @@
             }
             return;
         }
+        if (!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) showToast('Direct VLC opening requires TShow Desktop or a registered VLC link handler. Without one, copy the source link into VLC Open Network Stream.', 'warning');
         window.location.href = /Android/i.test(navigator.userAgent)
             ? 'intent:' + url.slice(url.indexOf(':') + 1) + '#Intent;scheme=' + new URL(url).protocol.replace(':', '') + ';package=org.videolan.vlc;end'
             : /iPhone|iPad|iPod/i.test(navigator.userAgent)

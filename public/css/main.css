@@ -3811,3 +3811,9 @@ body:not(.legal-page) .site-header .header-clock { grid-column: 4; justify-self:
   .rail-controls { top: 145px; right: -8px; left: -8px; }
   .rail-arrow { width: 34px; height: 34px; font-size: 16px; }
 }
+
+.catalog-shell { margin-top: 0; padding-top: 24px; border-radius: 0; background: #090b10; backdrop-filter: none; }
+.rail-arrow { width: 48px; height: 48px; font-size: 28px; }
+html { scrollbar-gutter: stable; }
+@media (prefers-reduced-motion: no-preference) { .site-sidebar { transition: transform 420ms cubic-bezier(.22,1,.36,1), visibility 0s linear 420ms; } .sidebar-scrim { transition: opacity 360ms ease, visibility 0s linear 360ms; } body.sidebar-open .site-sidebar, body.sidebar-open .sidebar-scrim { transition-delay: 0s; } }
+@media(max-width:700px) { .rail-arrow { width:42px; height:42px; font-size:24px; } }
