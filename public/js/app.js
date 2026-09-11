@@ -315,8 +315,8 @@
             });
         });
 
-        elements.menuButton.addEventListener('click', toggleSidebar);
-        elements.sidebarScrim.addEventListener('click', closeSidebar);
+        elements.menuButton?.addEventListener('click', toggleSidebar);
+        elements.sidebarScrim?.addEventListener('click', closeSidebar);
         window.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') closeSidebar();
             if (!elements.playerDialog?.open || event.target.matches('input, textarea, select')) return;
@@ -352,16 +352,16 @@
             renderAddons();
         });
 
-        elements.searchForm.addEventListener('submit', (event) => {
+        elements.searchForm?.addEventListener('submit', (event) => {
             event.preventDefault();
             runSearch(elements.searchInput.value);
         });
 
-        elements.searchInput.addEventListener('input', () => {
+        elements.searchInput?.addEventListener('input', () => {
             elements.searchClear.hidden = !elements.searchInput.value;
         });
 
-        elements.searchClear.addEventListener('click', () => {
+        elements.searchClear?.addEventListener('click', () => {
             elements.searchInput.value = '';
             elements.searchClear.hidden = true;
             elements.searchInput.focus();
@@ -377,13 +377,13 @@
             state.browseObserver.observe(elements.browseLoader);
         }
 
-        elements.regionSelect.addEventListener('change', () => {
+        elements.regionSelect?.addEventListener('change', () => {
             state.region = elements.regionSelect.value;
             saveStored(STORAGE_KEYS.region, state.region);
             showToast(`Viewing region changed to ${elements.regionSelect.selectedOptions[0].textContent}.`);
         });
 
-        elements.heroPlay.addEventListener('click', () => {
+        elements.heroPlay?.addEventListener('click', () => {
             if (!state.featured) return;
             if (mediaType(state.featured) === 'tv' && state.featured._addonCatalog) {
                 openDetails(state.featured);
@@ -391,42 +391,42 @@
                 playMedia(state.featured);
             }
         });
-        elements.heroInfo.addEventListener('click', () => {
+        elements.heroInfo?.addEventListener('click', () => {
             if (state.featured) openDetails(state.featured);
         });
 
-        elements.addonForm.addEventListener('submit', installAddon);
-        elements.refreshAddons.addEventListener('click', refreshAddons);
-        elements.exportDataButton.addEventListener('click', exportBrowserData);
-        elements.importDataButton.addEventListener('click', () => elements.importDataInput.click());
-        elements.importDataInput.addEventListener('change', importBrowserData);
-        elements.contactForm.addEventListener('submit', submitContactForm);
+        elements.addonForm?.addEventListener('submit', installAddon);
+        elements.refreshAddons?.addEventListener('click', refreshAddons);
+        elements.exportDataButton?.addEventListener('click', exportBrowserData);
+        elements.importDataButton?.addEventListener('click', () => elements.importDataInput.click());
+        elements.importDataInput?.addEventListener('change', importBrowserData);
+        elements.contactForm?.addEventListener('submit', submitContactForm);
 
         window.addEventListener('beforeinstallprompt', (event) => {
             event.preventDefault();
             state.installPrompt = event;
             elements.installAppButton.hidden = false;
         });
-        elements.installAppButton.addEventListener('click', installPWA);
+        elements.installAppButton?.addEventListener('click', installPWA);
         window.addEventListener('appinstalled', () => {
             state.installPrompt = null;
             elements.installAppButton.hidden = true;
             showToast('TShow was installed successfully.');
         });
-        elements.refreshAddonCatalogs.addEventListener('click', () => {
+        elements.refreshAddonCatalogs?.addEventListener('click', () => {
             state.addonCatalogLoadPromise = loadAddonCatalogs({ force: true });
         });
 
-        elements.detailsClose.addEventListener('click', () => elements.detailsDialog.close());
-        elements.detailsDialog.addEventListener('close', () => {
+        elements.detailsClose?.addEventListener('click', () => elements.detailsDialog.close());
+        elements.detailsDialog?.addEventListener('close', () => {
             state.detailsRequest = (state.detailsRequest || 0) + 1;
         });
-        elements.playerClose.addEventListener('click', () => elements.playerDialog.close());
-        elements.playerFullscreen.addEventListener('click', togglePlayerFullscreen);
-        elements.playerPip.addEventListener('click', togglePlayerPictureInPicture);
+        elements.playerClose?.addEventListener('click', () => elements.playerDialog.close());
+        elements.playerFullscreen?.addEventListener('click', togglePlayerFullscreen);
+        elements.playerPip?.addEventListener('click', togglePlayerPictureInPicture);
         document.addEventListener('fullscreenchange', updatePlayerWindowActions);
-        elements.videoPlayer.addEventListener('enterpictureinpicture', updatePlayerWindowActions);
-        elements.videoPlayer.addEventListener('leavepictureinpicture', updatePlayerWindowActions);
+        elements.videoPlayer?.addEventListener('enterpictureinpicture', updatePlayerWindowActions);
+        elements.videoPlayer?.addEventListener('leavepictureinpicture', updatePlayerWindowActions);
 
         [elements.detailsDialog, elements.playerDialog].forEach((dialog) => {
             dialog.addEventListener('click', (event) => {
@@ -435,8 +435,8 @@
             dialog.addEventListener('close', updateDialogState);
         });
 
-        elements.playerDialog.addEventListener('close', closePlayer);
-        elements.streamSelect.addEventListener('change', () => {
+        elements.playerDialog?.addEventListener('close', closePlayer);
+        elements.streamSelect?.addEventListener('change', () => {
             const index = Number.parseInt(elements.streamSelect.value, 10);
             if (Number.isInteger(index)) applyStream(index);
         });
@@ -446,44 +446,44 @@
                 renderSourcePicker();
             });
         });
-        elements.speedSelect.addEventListener('change', () => {
+        elements.speedSelect?.addEventListener('change', () => {
             elements.videoPlayer.playbackRate = Number(elements.speedSelect.value) || 1;
         });
-        elements.dataSaverButton.addEventListener('click', toggleDataSaver);
-        elements.openInDesktop.addEventListener('click', openActiveStreamInDesktop);
-        elements.openInVlc.addEventListener('click', openActiveStreamInVlc);
-        elements.openInOutplayer.addEventListener('click', openActiveStreamInOutplayer);
-        elements.openInSourceApp.addEventListener('click', openActiveStreamInSourceApp);
-        elements.copySourceLink.addEventListener('click', copyActiveSourceLink);
+        elements.dataSaverButton?.addEventListener('click', toggleDataSaver);
+        elements.openInDesktop?.addEventListener('click', openActiveStreamInDesktop);
+        elements.openInVlc?.addEventListener('click', openActiveStreamInVlc);
+        elements.openInOutplayer?.addEventListener('click', openActiveStreamInOutplayer);
+        elements.openInSourceApp?.addEventListener('click', openActiveStreamInSourceApp);
+        elements.copySourceLink?.addEventListener('click', copyActiveSourceLink);
         updateDataSaverButton();
-        elements.subtitleSelect.addEventListener('change', () => {
+        elements.subtitleSelect?.addEventListener('change', () => {
             applySubtitleChoice(elements.subtitleSelect.value);
         });
-        elements.openLocalSubtitle.addEventListener('click', () => {
+        elements.openLocalSubtitle?.addEventListener('click', () => {
             elements.subtitleFileInput.click();
         });
-        elements.subtitleFileInput.addEventListener('change', openLocalSubtitle);
-        elements.openExternalSource.addEventListener('click', () => {
+        elements.subtitleFileInput?.addEventListener('change', openLocalSubtitle);
+        elements.openExternalSource?.addEventListener('click', () => {
             if (state.activeExternalURL) {
                 window.open(state.activeExternalURL, '_blank', 'noopener,noreferrer');
             }
         });
-        elements.tryDirectSource.addEventListener('click', () => {
+        elements.tryDirectSource?.addEventListener('click', () => {
             if (Number.isInteger(state.activeAttemptIndex)) {
                 applyStream(state.activeAttemptIndex, { forceAttempt: true });
             }
         });
 
-        elements.videoPlayer.addEventListener('timeupdate', () => savePlaybackProgress());
-        elements.videoPlayer.addEventListener('pause', () => savePlaybackProgress(true));
-        elements.videoPlayer.addEventListener('ended', () => {
+        elements.videoPlayer?.addEventListener('timeupdate', () => savePlaybackProgress());
+        elements.videoPlayer?.addEventListener('pause', () => savePlaybackProgress(true));
+        elements.videoPlayer?.addEventListener('ended', () => {
             if (state.playerMedia) {
                 saveStored(STORAGE_KEYS.continueWatching, null);
                 state.continueEntry = null;
                 renderContinueWatching();
             }
         });
-        elements.videoPlayer.addEventListener('error', () => {
+        elements.videoPlayer?.addEventListener('error', () => {
             if (!elements.videoPlayer.currentSrc || state.hlsPlayer) return;
             const stream = state.streams[state.activeStreamIndex];
             if (stream?.directFromProvider) {
@@ -2207,9 +2207,9 @@
             const finishLoading = () => {
                 elements.videoLoading.hidden = true;
             };
-            elements.videoPlayer.addEventListener('loadedmetadata', finishLoading, { once: true });
-            elements.videoPlayer.addEventListener('canplay', finishLoading, { once: true });
-            elements.videoPlayer.addEventListener('playing', finishLoading, { once: true });
+            elements.videoPlayer?.addEventListener('loadedmetadata', finishLoading, { once: true });
+            elements.videoPlayer?.addEventListener('canplay', finishLoading, { once: true });
+            elements.videoPlayer?.addEventListener('playing', finishLoading, { once: true });
             elements.videoPlayer.src = url;
             elements.videoPlayer.load();
             attemptVideoPlay();
