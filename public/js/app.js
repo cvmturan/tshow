@@ -62,6 +62,7 @@
         sourceFilter: 'all',
         visibleStreamIndexes: [],
         activeStreamIndex: null,
+        playerRequest: 0,
         hlsPlayer: null,
         activeExternalURL: null,
         activeExternalAppURL: null,
@@ -1391,6 +1392,7 @@
     }
 
     function openTrailer(media, details) {
+        state.playerRequest += 1;
         const videos = details?.videos?.results;
         const tmdbTrailer = Array.isArray(videos)
             ? videos.find((video) =>
@@ -1437,6 +1439,8 @@
     }
 
     async function playMedia(media, details = null, requestedVideoId = null) {
+        const requestId = ++state.playerRequest;
+        const selectedVideoId = requestedVideoId || state.activeVideoId || null;
         resetTrailerFrame();
         state.playerMedia = serializeMedia(media);
         elements.playerTitle.textContent = mediaTitle(media);
@@ -1467,25 +1471,27 @@
             if (!resolvedDetails) {
                 if (media._addonCatalog) {
                     const resolved = await resolveAddonDetails(media);
+                    if (requestId !== state.playerRequest) return;
                     resolvedDetails = resolved.details;
                 } else {
                     const endpoint = mediaType(media) === 'movie' ? 'movie' : 'tv';
                     resolvedDetails = await api(`/api/tmdb/${endpoint}/${encodeURIComponent(media.id)}`);
+                    if (requestId !== state.playerRequest) return;
                 }
             }
 
             const streamType = mediaType(media) === 'movie' ? 'movie' : 'series';
-            const streamId = requestedVideoId ||
-                state.activeVideoId ||
+            const streamId = selectedVideoId ||
                 resolvedDetails.behaviorHints?.defaultVideoId ||
                 resolvedDetails.external_ids?.imdb_id ||
                 resolvedDetails.imdb_id ||
                 media._stremioId ||
                 media.id;
-            if (streamType === 'series' && !requestedVideoId && !state.activeVideoId) {
+            if (streamType === 'series' && !selectedVideoId) {
                 throw new Error('Choose a series episode before opening the player.');
             }
             const result = await api(`/api/streams/${streamType}/${encodeURIComponent(streamId)}`);
+            if (requestId !== state.playerRequest) return;
             state.streams = Array.isArray(result.streams)
                 ? result.streams.filter((stream) =>
                     stream &&
@@ -1504,7 +1510,7 @@
 
             renderSourcePicker();
 
-            loadSubtitleLibrary(streamType, streamId);
+            loadSubtitleLibrary(streamType, streamId, requestId);
 
             const recommendedIndex = recommendedStreamIndex();
             if (recommendedIndex >= 0) {
@@ -1513,6 +1519,7 @@
                 showSourceOverview(media);
             }
         } catch (error) {
+            if (requestId !== state.playerRequest) return;
             elements.videoLoading.hidden = true;
             elements.playerSourceTitle.textContent = 'No playable source';
             elements.playerSourceNote.textContent = error.message;
@@ -2041,9 +2048,10 @@
         }
     }
 
-    async function loadSubtitleLibrary(type, id) {
+    async function loadSubtitleLibrary(type, id, requestId = state.playerRequest) {
         try {
             const data = await api(`/api/streams/subtitles/${type}/${encodeURIComponent(id)}`);
+            if (requestId !== state.playerRequest) return;
             state.subtitleLibrary = Array.isArray(data.subtitles) ? data.subtitles : [];
             const missing = data.providers
                 ?.filter((provider) => provider.error)
@@ -2052,8 +2060,10 @@
                 showToast(`Subtitle provider(s) unavailable: ${missing.join(', ')}.`, 'warning');
             }
         } catch {
+            if (requestId !== state.playerRequest) return;
             state.subtitleLibrary = [];
         }
+        if (requestId !== state.playerRequest) return;
         renderSubtitlePicker();
     }
 
@@ -2223,6 +2233,7 @@
     }
 
     function closePlayer() {
+        state.playerRequest += 1;
         savePlaybackProgress(true);
         clearVideoElement();
         resetTrailerFrame();
