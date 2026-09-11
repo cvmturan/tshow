@@ -368,9 +368,9 @@
             if (state.activeView === 'search') setView('home');
         });
 
-        elements.browseSort.addEventListener('change', renderBrowseItems);
-        elements.browseLoadMore.addEventListener('click', () => loadMoreBrowse());
-        if ('IntersectionObserver' in window) {
+        elements.browseSort?.addEventListener('change', renderBrowseItems);
+        elements.browseLoadMore?.addEventListener('click', () => loadMoreBrowse());
+        if ('IntersectionObserver' in window && elements.browseLoader) {
             state.browseObserver = new IntersectionObserver((entries) => {
                 if (entries.some((entry) => entry.isIntersecting)) loadMoreBrowse();
             }, { rootMargin: '900px 0px' });
