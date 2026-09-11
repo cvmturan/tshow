@@ -1,0 +1,26 @@
+name: Check TShow Web
+
+on:
+  pull_request:
+    paths:
+      - "public/**"
+      - "cloudflare/**"
+      - "src/**"
+      - "scripts/**"
+      - "server.js"
+      - "package.json"
+      - ".github/workflows/web-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Check JavaScript syntax and required assets
+        run: node scripts/check.js
