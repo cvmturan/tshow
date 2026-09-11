@@ -106,7 +106,7 @@
 
     async function browserJSON(value, signal) {
         const url = publicAddonURL(value);
-        const response = await nativeFetch(url.href, { credentials: 'omit', referrerPolicy: 'no-referrer', signal: signal || AbortSignal.timeout(10000) });
+        const response = await nativeFetch(url.href, { credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store', signal: signal || AbortSignal.timeout(10000) });
         if (!response.ok) throw new Error('Provider declined browser access.');
         publicAddonURL(response.url);
         const reader = response.body.getReader();
@@ -146,6 +146,7 @@
                 const endpoint = publicAddonURL(manifest.manifestURL);
                 endpoint.search = ''; endpoint.hash = '';
                 endpoint.pathname = endpoint.pathname.replace(/\/manifest\.json\/?$/i, '') + '/stream/' + (type === 'tv' ? 'series' : type) + '/' + encodeURIComponent(decodeURIComponent(encodedId)) + '.json';
+                endpoint.searchParams.set('_tshow_fresh', `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`);
                 const data = await browserJSON(endpoint.href, init.signal);
                 return await normalizeBrowserResult(manifest, 'stream', data, init.signal);
             } catch { return null; }
@@ -205,4 +206,3 @@
         return nativeFetch(input, init);
     };
 })();
-

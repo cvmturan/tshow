@@ -30,9 +30,10 @@ test('intermittent host 403 recovers through the browser and retains episode IDs
     URL, Request, Response, Headers, AbortSignal, TextEncoder, Blob, btoa
   });
   const body = await (await window.fetch('/api/streams/series/tt1234567%3A2%3A3')).json();
-  assert.equal(providerURL, 'https://addon.example/stream/series/tt1234567%3A2%3A3.json');
+  const requestedProviderURL = new URL(providerURL);
+  assert.equal(requestedProviderURL.origin + requestedProviderURL.pathname, 'https://addon.example/stream/series/tt1234567%3A2%3A3.json');
+  assert.match(requestedProviderURL.searchParams.get('_tshow_fresh'), /^[a-z0-9]+-[a-z0-9]+$/);
   assert.equal(body.streams[0].sizeLabel, '1.0 GB');
   assert.equal(body.sources[0].connection, 'browser');
   assert.equal(body.sources[0].error, undefined);
 });
-
