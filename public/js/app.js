@@ -139,7 +139,7 @@
         const addonNotice = document.getElementById('addon-account-notice');
         if (addonNotice) addonNotice.hidden = Boolean(window.TShowAccount?.user);
 
-        await Promise.all([
+        const homeReady = Promise.all([
             loadHome(),
             initializeAddons()
         ]);
@@ -152,6 +152,7 @@
         const requestedTitle = new URLSearchParams(window.location.search).get('title');
         const titleMatch = String(requestedTitle || '').match(/^(movie|tv):(\d{1,12}|tt\d{5,12})$/i);
         if (titleMatch) {
+            elements.detailsDialog.classList.toggle('details-full-page', new URLSearchParams(location.search).get('full') === '1');
             const titleType = titleMatch[1].toLowerCase();
             const titleId = titleMatch[2];
             openDetails(/^tt/i.test(titleId) ? {
@@ -165,6 +166,7 @@
                 _addonCatalog: true
             } : { id: Number(titleId), media_type: titleType });
         }
+        await homeReady;
     }
 
     function cacheElements() {
@@ -407,6 +409,14 @@
         });
 
         elements.detailsClose.addEventListener('click', () => elements.detailsDialog.close());
+        elements.detailsDialog.addEventListener('close', () => {
+            state.detailsRequest = (state.detailsRequest || 0) + 1;
+            if (elements.detailsDialog.classList.contains('details-full-page')) {
+                elements.detailsDialog.classList.remove('details-full-page');
+                history.replaceState(null, '', '/');
+                document.title = 'TShow · Movies, series and trailers';
+            }
+        });
         elements.playerClose.addEventListener('click', () => elements.playerDialog.close());
         elements.playerFullscreen.addEventListener('click', togglePlayerFullscreen);
         elements.playerPip.addEventListener('click', togglePlayerPictureInPicture);
@@ -838,62 +848,83 @@
     }
 
     async function openDetails(media) {
+        const requestId = state.detailsRequest = (state.detailsRequest || 0) + 1;
+        const loading = makeElement('div', 'details-status');
+        const loadingTitle = makeElement('h2', '', 'Loading title…');
+        loadingTitle.id = 'details-title';
+        loading.append(loadingTitle, makeElement('p', '', 'Getting the story, episodes and watch options.'));
+        loading.setAttribute('role', 'status');
+        elements.detailsContent.replaceChildren(loading);
+        openDialog(elements.detailsDialog);
+        elements.detailsDialog.scrollTop = 0;
+        let activeMedia, activeDetails;
         const type = mediaType(media);
 
         try {
             if (media._addonCatalog) {
                 const resolved = await resolveAddonDetails(media);
-                state.activeMedia = resolved.media;
-                state.activeDetails = resolved.details;
+                if (requestId !== state.detailsRequest) return;
+                activeMedia = resolved.media;
+                activeDetails = resolved.details;
             } else {
                 const endpoint = type === 'movie' ? 'movie' : 'tv';
                 const details = await api(`/api/tmdb/${endpoint}/${encodeURIComponent(media.id)}`);
-                state.activeMedia = normalizeMedia({ ...media, ...details }, type);
-                state.activeDetails = details;
+                if (requestId !== state.detailsRequest) return;
+                activeMedia = normalizeMedia({ ...media, ...details }, type);
+                activeDetails = details;
             }
 
-            const imdbId = state.activeDetails?.external_ids?.imdb_id || state.activeDetails?.imdb_id || state.activeMedia?.imdb_id;
+            const imdbId = activeDetails?.external_ids?.imdb_id || activeDetails?.imdb_id || activeMedia?.imdb_id;
             if (/^tt\d{5,12}$/i.test(String(imdbId || ''))) {
-                state.activeMedia.imdb_id = imdbId;
+                activeMedia.imdb_id = imdbId;
             }
-            if (state.activeMedia._addonCatalog && /^tt\d+$/.test(imdbId || state.activeMedia._stremioId || '')) {
+            if (state.tmdbConfigured && activeMedia._addonCatalog && /^tt\d+$/.test(imdbId || activeMedia._stremioId || '')) {
                 try {
-                    const externalId = imdbId || state.activeMedia._stremioId;
+                    const externalId = imdbId || activeMedia._stremioId;
                     const resolved = await api(`/api/tmdb/resolve/${externalId}?type=${type}`);
                     if (resolved.id) {
-                        state.activeMedia._tmdbId = resolved.id;
+                        activeMedia._tmdbId = resolved.id;
                         const enriched = await api(`/api/tmdb/${type}/${resolved.id}`);
-                        state.activeDetails = { ...enriched, ...state.activeDetails, credits: enriched.credits, recommendations: enriched.recommendations };
+                        activeDetails = { ...enriched, ...activeDetails, credits: enriched.credits, recommendations: enriched.recommendations };
                     }
                 } catch { /* The original add-on details remain usable. */ }
             }
-            if (imdbId && !state.activeMedia.imdb_rating) {
+            if (imdbId && !activeMedia.imdb_rating) {
                 try {
                     const addonType = type === 'movie' ? 'movie' : 'series';
                     const ratingData = await api(`/api/addons/meta/org.streamflix.cinemeta/${addonType}/${encodeURIComponent(imdbId)}`);
                     const imdbRating = Number.parseFloat(ratingData?.meta?.imdbRating);
-                    if (Number.isFinite(imdbRating) && imdbRating > 0) state.activeMedia.imdb_rating = imdbRating;
+                    if (Number.isFinite(imdbRating) && imdbRating > 0) activeMedia.imdb_rating = imdbRating;
                 } catch {
                     // The catalog rating remains available when the metadata add-on is offline.
                 }
             }
 
-            const tmdbId = state.activeMedia?._tmdbId || state.activeDetails?.id;
+            const tmdbId = activeMedia?._tmdbId || activeDetails?.id;
             if (/^\d+$/.test(String(tmdbId || ''))) {
                 try {
-                    state.activeDetails.watchProviders = await api(
+                    activeDetails.watchProviders = await api(
                         `/api/tmdb/watch-providers/${type}/${encodeURIComponent(tmdbId)}?country=${encodeURIComponent(state.region)}`
                     );
                 } catch {
-                    state.activeDetails.watchProviders = null;
+                    activeDetails.watchProviders = null;
                 }
             }
 
-            renderDetails(state.activeMedia, state.activeDetails);
-            rememberRecentlyViewed(state.activeMedia);
+            if (requestId !== state.detailsRequest) return;
+            state.activeMedia = activeMedia;
+            state.activeDetails = activeDetails;
+            renderDetails(activeMedia, activeDetails);
+            if (elements.detailsDialog.classList.contains('details-full-page')) document.title = `${mediaTitle(activeMedia)} · TShow`;
+            rememberRecentlyViewed(activeMedia);
             openDialog(elements.detailsDialog);
         } catch (error) {
-            showToast(error.message || 'Could not load title details.', 'error');
+            if (requestId !== state.detailsRequest) return;
+            loadingTitle.textContent = 'This title could not load';
+            loading.querySelector('p').textContent = error.message || 'The metadata provider is unavailable. Please try again.';
+            const retry = makeElement('button', 'button button-primary', 'Try again');
+            retry.addEventListener('click', () => openDetails(media));
+            loading.append(retry);
         }
     }
 
@@ -1109,9 +1140,10 @@
 
         actions.append(playButton, trailerButton, listButton, shareButton);
         const titleURL = publicTitleURL(media);
-        if (titleURL) {
+        if (titleURL && !elements.detailsDialog.classList.contains('details-full-page')) {
             const fullPageLink = makeElement('a', 'button button-quiet', 'Full page');
-            fullPageLink.href = `${titleURL}?country=${encodeURIComponent(state.region)}`;
+            const stableId = titleURL.split('/')[2];
+            fullPageLink.href = `/?title=${encodeURIComponent(`${type}:${stableId}`)}&full=1`;
             actions.append(fullPageLink);
         }
         main.append(actions);

@@ -525,7 +525,7 @@ video {
     position: relative;
     z-index: 2;
     width: min(100%, var(--content-width));
-    margin: -80px auto 0;
+    margin: 0 auto;
     padding: 0 clamp(18px, 4vw, 68px) 72px;
 }
 
@@ -2395,7 +2395,7 @@ code {
     }
 
     .catalog-shell {
-        margin-top: -70px;
+        margin-top: 0;
         padding-right: 15px;
         padding-left: 15px;
     }
@@ -3741,3 +3741,36 @@ body:not(.legal-page) .site-header .header-clock { grid-column: 4; justify-self:
 .addon-account-notice { padding: 14px; border: 1px solid rgba(87,230,210,.25); border-radius: 12px; background: rgba(87,230,210,.06); line-height: 1.6; }
 @media(max-width:560px) { body:not(.legal-page) .site-header { grid-template-columns: 34px auto minmax(55px,1fr) 68px; gap: 5px; } body:not(.legal-page) .site-header .account-button { max-width: 74px; } .site-header .search-form input { font-size: 11px; } }
 
+/* Keep the featured story and catalog in separate, predictable sections. */
+.hero { min-height: clamp(560px, 76vh, 780px); padding-bottom: 52px; }
+.hero-content { min-width: 0; }
+.hero h1, .details-main h2 { overflow-wrap: anywhere; }
+.catalog-shell { padding-top: 28px; }
+.catalog-section:first-child { margin-top: 0; }
+.details-status { min-height: 340px; display: grid; align-content: center; justify-items: start; gap: 16px; padding: 72px clamp(22px, 5vw, 64px); }
+.details-status h2, .details-status p { margin: 0; }
+.details-status p { color: var(--muted-strong); line-height: 1.6; }
+.media-dialog.details-full-page { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; }
+.details-full-page .dialog-close { position: fixed; top: 18px; right: 22px; }
+.details-full-page .details-backdrop { min-height: clamp(270px, 43vh, 440px); }
+.details-full-page .details-layout { width: min(1180px, 100%); margin: -115px auto 0; padding-bottom: 36px; align-items: start; }
+.details-full-page .details-main { align-self: start; padding-top: 36px; }
+.details-full-page .details-extras { width: min(1180px, 100%); margin-inline: auto; }
+.media-dialog { overscroll-behavior: contain; }
+.details-poster { align-self: start; }
+@media (prefers-reduced-motion: no-preference) {
+    .media-dialog[open] { animation: detail-arrive 180ms ease-out; }
+    .button { transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
+    .button:hover:not(:disabled) { transform: translateY(-1px); }
+    @keyframes detail-arrive { from { opacity: .4; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+}
+@media (max-width: 600px) {
+    .hero { min-height: 600px; padding-bottom: 36px; }
+    .hero h1 { font-size: clamp(38px, 11vw, 60px); line-height: 1.02; }
+    .catalog-shell { padding-top: 24px; }
+    .details-full-page .details-layout { margin-top: -80px; }
+    .details-full-page .details-main { padding-top: 0; }
+    .details-full-page .details-backdrop { min-height: 250px; }
+    .details-actions { gap: 8px; }
+    .details-actions .button { min-height: 44px; }
+}

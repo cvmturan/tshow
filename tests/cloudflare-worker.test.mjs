@@ -78,15 +78,15 @@ test('permanent numeric title routes redirect into the SPA', async () => {
     new Request('https://showt.fun/movie/278/the-shawshank-redemption?country=IN'), env(), createContext()
   );
   assert.equal(movie.status, 302);
-  assert.equal(movie.headers.get('location'), 'https://showt.fun/?title=movie%3A278');
+  assert.equal(movie.headers.get('location'), 'https://showt.fun/?title=movie%3A278&full=1');
   const series = await worker.fetch(
     new Request('https://showt.fun/series/1399/game-of-thrones'), env(), createContext()
   );
-  assert.equal(series.headers.get('location'), 'https://showt.fun/?title=tv%3A1399');
+  assert.equal(series.headers.get('location'), 'https://showt.fun/?title=tv%3A1399&full=1');
   const imdb = await worker.fetch(
     new Request('https://showt.fun/movie/tt0111161/the-shawshank-redemption'), env(), createContext()
   );
-  assert.equal(imdb.headers.get('location'), 'https://showt.fun/?title=movie%3Att0111161');
+  assert.equal(imdb.headers.get('location'), 'https://showt.fun/?title=movie%3Att0111161&full=1');
 });
 
 test('installed add-ons are supplied per browser request and never globally stored', async (t) => {
@@ -291,4 +291,3 @@ test('public metadata caching works without caching private add-on routes', asyn
   assert.equal(second.headers.get('x-tshow-edge-cache'), 'HIT');
   assert.equal(calls, 1);
 });
-
