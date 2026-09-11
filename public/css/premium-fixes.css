@@ -1,0 +1,75 @@
+/* Compatibility fixes for the premium interface layer. */
+@media (max-width: 760px) {
+  body { padding-bottom: 0 !important; }
+
+  .site-sidebar {
+    display: flex !important;
+    position: fixed !important;
+    inset: 0 auto 0 0 !important;
+    width: 236px !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+    padding: 22px 16px 18px !important;
+    border: 0 !important;
+    border-right: 1px solid rgba(255,255,255,.10) !important;
+    border-radius: 0 !important;
+    background: linear-gradient(180deg, rgba(18,20,27,.985), rgba(10,11,15,.99)) !important;
+    transform: translateX(calc(-100% - 24px)) !important;
+    visibility: hidden !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    box-shadow: 24px 0 70px rgba(0,0,0,.4) !important;
+  }
+
+  body.sidebar-open .site-sidebar {
+    transform: translateX(0) !important;
+    visibility: visible !important;
+  }
+
+  .site-sidebar .brand { display: inline-flex !important; }
+  .site-sidebar .sidebar-label { display: block !important; }
+  .site-sidebar .sidebar-foot { display: flex !important; }
+  .site-sidebar .sidebar-nav {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+    height: auto !important;
+    overflow-y: auto !important;
+  }
+  .site-sidebar .nav-link:not(.install-app-button) {
+    display: inline-flex !important;
+    min-height: 43px !important;
+    height: auto !important;
+    padding: 10px 12px !important;
+    border-radius: 9px !important;
+    flex-direction: row !important;
+    justify-content: flex-start !important;
+    gap: 7px !important;
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+  }
+  .site-sidebar .install-app-button:not([hidden]) { display: inline-flex !important; }
+  .site-sidebar .nav-link > span[aria-hidden="true"] { font-size: 17px !important; line-height: inherit !important; }
+  .site-sidebar .nav-link::before { display: block !important; }
+
+  .sidebar-scrim {
+    display: block !important;
+    position: fixed !important;
+    inset: 0 !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+  body.sidebar-open .sidebar-scrim {
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  .menu-button { display: grid !important; }
+  .site-footer { padding-bottom: 48px !important; }
+}
+
+@media (max-width: 640px) {
+  .site-footer { padding-bottom: 34px !important; }
+}
