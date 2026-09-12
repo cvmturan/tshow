@@ -1,3 +1,4 @@
+import { uniqueHistory } from '../public/js/media-history.mjs';
 const encoder = new TextEncoder();
 const COOKIE = '__Host-tshow-session';
 const KEYS = new Set(['watchlist', 'continueWatching', 'recentlyViewed', 'addonURLs', 'region', 'playerPreferences']);
@@ -94,7 +95,7 @@ export function validateData(key, value) {
     if (!Array.isArray(value) || value.length > 20 || value.some(v => { try { const u = new URL(v); return typeof v !== 'string' || v.length > 8192 || u.protocol !== 'https:' || u.username || u.password; } catch { return true; } })) fail('Invalid add-on list.');
   } else if (key === 'region') { if (typeof value !== 'string' || !/^[A-Z]{2}$/.test(value)) fail('Invalid region.'); }
   else if (value !== null && (typeof value !== 'object' || Array.isArray(value))) fail('Invalid setting.');
-  const encoded = JSON.stringify(value);
+  const encoded = JSON.stringify(key === 'recentlyViewed' ? uniqueHistory(value) : value);
   if (encoder.encode(encoded).length > 240000) fail('This saved item is too large.', 413);
   return encoded;
 }
@@ -286,4 +287,3 @@ export async function cleanAccounts(env) {
   const time = now();
   await env.DB.batch(['sessions', 'auth_limits', 'oauth_states', 'email_tokens'].map(table => env.DB.prepare(`DELETE FROM ${table} WHERE expires_at<?`).bind(time)));
 }
-

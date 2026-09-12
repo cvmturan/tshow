@@ -7,7 +7,7 @@ const require=createRequire(import.meta.url);
 const {Miniflare,convertV4MiniflareOptions}=createRequire(require.resolve('wrangler/package.json'))('miniflare');
 
 test('accounts: sessions, isolated storage, conflicts, recovery and deletion', async t=>{
- const mf=new Miniflare(convertV4MiniflareOptions({workers:[{name:'tshow',modules:await Promise.all(['worker.mjs','accounts.mjs'].map(async f=>({type:'ESModule',path:fileURLToPath(new URL('../cloudflare/'+f,import.meta.url)),contents:await readFile(new URL('../cloudflare/'+f,import.meta.url),'utf8')}))),d1Databases:['DB'],bindings:{APP_ORIGIN:'https://showt.fun'},compatibilityDate:'2026-09-04'}]}));
+ const mf=new Miniflare(convertV4MiniflareOptions({workers:[{name:'tshow',modules:await Promise.all(['worker.mjs','accounts.mjs','../public/js/media-history.mjs'].map(async f=>({type:'ESModule',path:fileURLToPath(new URL('../cloudflare/'+f,import.meta.url)),contents:await readFile(new URL('../cloudflare/'+f,import.meta.url),'utf8')}))),d1Databases:['DB'],bindings:{APP_ORIGIN:'https://showt.fun'},compatibilityDate:'2026-09-04'}]}));
  t.after(()=>mf.dispose());
  const db=await mf.getD1Database('DB');
  const sql=(await Promise.all(['0001_accounts.sql','0002_profiles.sql'].map(f=>readFile(new URL('../cloudflare/migrations/'+f,import.meta.url),'utf8')))).join('\n');
@@ -50,7 +50,6 @@ test('accounts: sessions, isolated storage, conflicts, recovery and deletion', a
  assert.equal((await call('/api/auth/logout','POST',{},b.cookie)).status,200);
  assert.equal((await call('/api/account/data','GET',undefined,b.cookie)).status,401);
 });
-
 
 
 

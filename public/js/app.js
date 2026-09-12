@@ -1,6 +1,7 @@
 (async () => {
     'use strict';
     await window.TShowAccount?.ready;
+    const { uniqueHistory } = await import('./media-history.mjs?v=20260912-5');
 
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
@@ -469,6 +470,11 @@
         updateDataSaverButton();
         elements.videoPlayer.textTracks?.addEventListener('addtrack', renderSubtitlePicker);
         elements.videoPlayer.textTracks?.addEventListener('removetrack', renderSubtitlePicker);
+        document.getElementById('video-fit')?.addEventListener('change', (event) => { elements.videoStage.dataset.videoFit = event.target.value; });
+        const sizePlayerMenu = () => { const panel = document.querySelector('.subtitle-menu-panel'); if (panel) panel.style.maxHeight = Math.max(80, Math.min(elements.videoStage.clientHeight - 110, elements.videoStage.getBoundingClientRect().bottom - 102 - Math.max(8, elements.playerDialog.getBoundingClientRect().top + 8))) + 'px'; };
+        if (window.ResizeObserver) new ResizeObserver(sizePlayerMenu).observe(elements.videoStage);
+        elements.playerDialog.addEventListener('scroll', sizePlayerMenu, { passive: true });
+        document.getElementById('player-subtitles-menu')?.addEventListener('toggle', sizePlayerMenu);
         document.getElementById('subtitle-size')?.addEventListener('change', (event) => { elements.videoStage.dataset.subtitleSize = event.target.value; });
         elements.subtitleSelect?.addEventListener('change', () => {
             applySubtitleChoice(elements.subtitleSelect.value);
@@ -1728,7 +1734,7 @@
     }
 
     function sourceFilterHelp(filter) {
-        if (filter === 'playable') return 'Direct MP4, WebM, or HLS sources. User-added video connects from its provider straight to your browser.';
+        if (filter === 'playable') return 'Direct video links. Playback still depends on the provider response and the codecs supported by this device.';
         if (filter === 'external') return 'User-added sources open directly in external players, source apps, or provider pages. Their video never passes through TShow.';
         if (filter === 'app-only') return 'These are downloads, redirects, torrents, or unknown formats intended for another app.';
         if (filter === 'demo') return 'The short CC0 flower video only tests the player. It is not the movie or episode you selected.';
@@ -1747,7 +1753,7 @@
         if (stream.playbackMode === 'proxy' && stream.transcodeLowUrl) {
             badges.push('proxied link');
         } else if (stream.browserReady) {
-            badges.push(stream.format ? stream.format.toUpperCase() : 'plays here');
+            badges.push(stream.format ? stream.format.toUpperCase() : 'browser attempt');
         }
         if (stream.externalPlayerUrl && !stream.browserReady) badges.push('external player');
         if (stream.externalAppUrl && !stream.browserReady) badges.push('source app');
@@ -2466,22 +2472,24 @@
 
     function rememberRecentlyViewed(media) {
         const serialized = serializeMedia(media);
-        state.recentlyViewed = [
-            serialized,
-            ...state.recentlyViewed.filter((item) => mediaKey(item) !== mediaKey(serialized))
-        ].slice(0, 20);
+        state.recentlyViewed = uniqueHistory([serialized, ...state.recentlyViewed]).slice(0, 20);
         saveStored(STORAGE_KEYS.recentlyViewed, JSON.stringify(state.recentlyViewed));
         renderRecentlyViewed();
     }
 
     function renderRecentlyViewed() {
-        const items = state.recentlyViewed.map((item) => normalizeMedia(item)).filter(Boolean);
+        const cleaned = uniqueHistory(state.recentlyViewed);
+        if (cleaned.length !== state.recentlyViewed.length) {
+            state.recentlyViewed = cleaned;
+            saveStored(STORAGE_KEYS.recentlyViewed, JSON.stringify(cleaned));
+        }
+        const items = uniqueHistory(state.recentlyViewed).map((item) => normalizeMedia(item)).filter(Boolean);
         elements.recentSection.hidden = items.length === 0;
         if (items.length) renderRail(elements.recentRail, items);
     }
 
     function renderHistory() {
-        const items = state.recentlyViewed.map((item) => normalizeMedia(item)).filter(Boolean);
+        const items = uniqueHistory(state.recentlyViewed).map((item) => normalizeMedia(item)).filter(Boolean);
         elements.historyGrid?.replaceChildren(...items.map((item) => createMediaCard(item)));
         if (elements.historyEmpty) elements.historyEmpty.hidden = items.length > 0;
         if (elements.clearHistory) elements.clearHistory.hidden = items.length === 0;
@@ -3750,7 +3758,7 @@
                 throw new Error('This is not a supported TShow backup.');
             }
             state.watchlist = Array.isArray(payload.watchlist) ? payload.watchlist.slice(0, 250) : [];
-            state.recentlyViewed = Array.isArray(payload.recentlyViewed) ? payload.recentlyViewed.slice(0, 20) : [];
+            state.recentlyViewed = Array.isArray(payload.recentlyViewed) ? uniqueHistory(payload.recentlyViewed).slice(0, 20) : [];
             state.addonURLs = Array.isArray(payload.addonURLs)
                 ? payload.addonURLs.filter((value) => typeof value === 'string' && value.length <= 8192).slice(0, 20)
                 : [];

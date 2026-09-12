@@ -3829,3 +3829,18 @@ html { scrollbar-gutter: stable; }
 .video-stage[data-subtitle-size="small"] video::cue { font-size:80%; }
 .video-stage[data-subtitle-size="large"] video::cue { font-size:140%; }
 .player-dialog.is-trailer .player-subtitles-menu { display:none; }
+
+html, body { background-color:#090b10; }
+.player-subtitles-menu { top:auto; bottom:54px; right:14px; }
+.player-subtitles-menu summary { width:40px; height:40px; display:grid; place-items:center; padding:0; font-size:26px; line-height:1; }
+.subtitle-menu-panel { top:auto; bottom:48px; }
+.video-stage, .video-stage video { border:0; outline:0; background:#000; }
+.video-stage video { display:block; }
+.video-stage[data-video-fit="fill"] video { object-fit:cover; }
+.video-stage:fullscreen { padding:0; margin:0; border:0; border-radius:0; box-shadow:none; background:#000; overflow:hidden; }
+.video-stage::backdrop, .player-dialog::backdrop { background:#000; }
+
+html { color-scheme:dark; }
+.video-stage { width:100%; min-width:0; }
+.player-dialog, .subtitle-menu-panel { scrollbar-color:#515766 #141821; scrollbar-width:thin; }
+.subtitle-menu-panel .speed-control { display:grid; width:100%; gap:8px; }
