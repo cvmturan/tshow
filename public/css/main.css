@@ -3817,3 +3817,15 @@ body:not(.legal-page) .site-header .header-clock { grid-column: 4; justify-self:
 html { scrollbar-gutter: stable; }
 @media (prefers-reduced-motion: no-preference) { .site-sidebar { transition: transform 420ms cubic-bezier(.22,1,.36,1), visibility 0s linear 420ms; } .sidebar-scrim { transition: opacity 360ms ease, visibility 0s linear 360ms; } body.sidebar-open .site-sidebar, body.sidebar-open .sidebar-scrim { transition-delay: 0s; } }
 @media(max-width:700px) { .rail-arrow { width:42px; height:42px; font-size:24px; } }
+
+.player-subtitles-menu { position:absolute; top:14px; right:14px; z-index:8; color:#fff; }
+.player-subtitles-menu summary { list-style:none; cursor:pointer; padding:8px 12px; border:1px solid #ffffff50; border-radius:9px; background:#10131ddd; font-weight:700; }
+.player-subtitles-menu summary::-webkit-details-marker { display:none; }
+.subtitle-menu-panel { position:absolute; right:0; top:44px; width:min(290px,75vw); max-height:calc(68vh - 90px); overflow:auto; display:grid; gap:10px; padding:16px; background:#151925f5; border:1px solid #ffffff25; border-radius:14px; box-shadow:0 12px 36px #0008; }
+.subtitle-menu-panel select { width:100%; padding:9px; background:#242a39; color:white; border:1px solid #ffffff35; border-radius:8px; }
+.subtitle-menu-help { font-size:12px; color:#bdc5d5; margin:0; }
+.video-stage:fullscreen { width:100vw; height:100vh; max-height:none; aspect-ratio:auto; }
+.video-stage:fullscreen .subtitle-menu-panel { max-height:70vh; }
+.video-stage[data-subtitle-size="small"] video::cue { font-size:80%; }
+.video-stage[data-subtitle-size="large"] video::cue { font-size:140%; }
+.player-dialog.is-trailer .player-subtitles-menu { display:none; }

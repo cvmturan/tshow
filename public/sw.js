@@ -1,15 +1,15 @@
 'use strict';
 
-const SHELL_CACHE = 'tshow-shell-v32';
+const SHELL_CACHE = 'tshow-shell-v33';
 const SHELL_FILES = [
   '/',
   '/index.html',
   '/legal.html',
   '/js/accounts.js?v=20260911-4',
   '/css/accounts.css?v=20260911-3',
-  '/css/main.css?v=20260912-3',
+  '/css/main.css?v=20260912-4',
   '/js/cloudflare-context.js?v=20260911-4',
-  '/js/app.js?v=20260912-3',
+  '/js/app.js?v=20260912-4',
   '/manifest.webmanifest',
   '/assets/tshow-logo.png',
   '/assets/tshow-icon-192.png',

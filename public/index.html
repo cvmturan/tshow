@@ -21,12 +21,12 @@
     <link rel="icon" href="/assets/tshow-icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="/assets/tshow-icon-192.png">
     <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="stylesheet" href="/css/main.css?v=20260912-3">
+    <link rel="stylesheet" href="/css/main.css?v=20260912-4">
     <script src="/vendor/hls/hls.min.js" defer></script>
     <link rel="stylesheet" href="/css/accounts.css?v=20260911-3">
     <script src="/js/accounts.js?v=20260911-4" defer></script>
     <script src="/js/cloudflare-context.js?v=20260911-4" defer></script>
-    <script src="/js/app.js?v=20260912-3" defer></script>
+    <script src="/js/app.js?v=20260912-4" defer></script>
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"TShow","url":"https://showt.fun/","logo":"https://showt.fun/assets/tshow-icon-512.png","email":"support@showt.fun"}</script>
 </head>
 <body>
@@ -540,6 +540,19 @@
         </div>
 
         <div class="video-stage" id="video-stage">
+            <details class="player-subtitles-menu" id="player-subtitles-menu"><summary aria-label="Subtitles">CC</summary>
+            <div class="subtitle-menu-panel">
+                <label for="subtitle-select">Subtitles</label>
+                <select id="subtitle-select">
+                    <option value="">Off</option>
+                </select>
+                <button class="button button-quiet" id="open-local-subtitle" type="button">Open file…</button>
+                <label for="subtitle-size">Text size</label>
+                <select id="subtitle-size"><option value="small">Small</option><option value="normal" selected>Normal</option><option value="large">Large</option></select>
+                <p class="subtitle-menu-help">Choose a provider subtitle, an available embedded track, or your own SRT/VTT file.</p>
+                <input id="subtitle-file-input" type="file" accept=".vtt,.srt,text/vtt" hidden>
+            </div>
+            </details>
             <video id="video-player" controls playsinline preload="metadata"></video>
             <iframe
                 id="trailer-frame"
@@ -571,7 +584,7 @@
                     </div>
                     <div class="source-filter-group" id="source-filter-group" aria-label="Filter video sources">
                         <button class="source-filter" type="button" data-source-filter="all" aria-pressed="true">All <span>0</span></button>
-                        <button class="source-filter" type="button" data-source-filter="playable" aria-pressed="false">Plays here <span>0</span></button>
+                        <button class="source-filter" type="button" data-source-filter="playable" aria-pressed="false">Try in browser <span>0</span></button>
                         <button class="source-filter" type="button" data-source-filter="external" aria-pressed="false">Links <span>0</span></button>
                         <button class="source-filter" type="button" data-source-filter="app-only" aria-pressed="false">App-only <span>0</span></button>
                         <button class="source-filter" type="button" data-source-filter="demo" aria-pressed="false">Player test <span>0</span></button>
@@ -593,14 +606,6 @@
                     <button class="button button-quiet" id="open-in-source-app" type="button" hidden>Open source app</button>
                     <button class="button button-quiet" id="copy-source-link" type="button">Copy source link</button>
                 </div>
-            </div>
-            <div class="speed-control subtitle-control">
-                <label for="subtitle-select">Subtitles</label>
-                <select id="subtitle-select">
-                    <option value="">Off</option>
-                </select>
-                <button class="button button-quiet" id="open-local-subtitle" type="button">Open file…</button>
-                <input id="subtitle-file-input" type="file" accept=".vtt,.srt,text/vtt" hidden>
             </div>
             <div class="speed-control">
                 <label>Quality<select id="player-quality" disabled><option value="-1">Auto quality</option></select></label>

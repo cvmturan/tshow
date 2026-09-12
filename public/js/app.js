@@ -334,7 +334,7 @@
         elements.sidebarScrim?.addEventListener('click', closeSidebar);
         window.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') closeSidebar();
-            if (!elements.playerDialog?.open || event.target.matches('input, textarea, select')) return;
+            if (!elements.playerDialog?.open || event.target.closest('input, textarea, select, button, summary')) return;
             if (event.key === ' ' && !elements.videoPlayer.hidden) {
                 event.preventDefault();
                 if (elements.videoPlayer.paused) elements.videoPlayer.play().catch(() => {});
@@ -343,7 +343,7 @@
             if (['ArrowLeft','ArrowRight'].includes(event.key) && Number.isFinite(elements.videoPlayer.duration)) {event.preventDefault();elements.videoPlayer.currentTime=Math.max(0,Math.min(elements.videoPlayer.duration,elements.videoPlayer.currentTime+(event.key==='ArrowRight'?10:-10)));}
             if (event.key.toLocaleLowerCase() === 'm') elements.videoPlayer.muted = !elements.videoPlayer.muted;
             if (event.key.toLocaleLowerCase() === 'f' && document.fullscreenEnabled) {
-                document.fullscreenElement ? document.exitFullscreen() : elements.videoPlayer.requestFullscreen?.();
+                togglePlayerFullscreen();
             }
             if (event.key.toLocaleLowerCase() === 'p' && document.pictureInPictureEnabled && !elements.videoPlayer.hidden) {
                 document.pictureInPictureElement
@@ -467,6 +467,9 @@
         elements.openInSourceApp?.addEventListener('click', openActiveStreamInSourceApp);
         elements.copySourceLink?.addEventListener('click', copyActiveSourceLink);
         updateDataSaverButton();
+        elements.videoPlayer.textTracks?.addEventListener('addtrack', renderSubtitlePicker);
+        elements.videoPlayer.textTracks?.addEventListener('removetrack', renderSubtitlePicker);
+        document.getElementById('subtitle-size')?.addEventListener('change', (event) => { elements.videoStage.dataset.subtitleSize = event.target.value; });
         elements.subtitleSelect?.addEventListener('change', () => {
             applySubtitleChoice(elements.subtitleSelect.value);
         });
@@ -500,7 +503,9 @@
             if (stream?.directFromProvider) {
                 updateExternalPlayerActions(stream);
                 showUnsupportedSource(
-                    'The browser could not play this provider link directly. TShow did not relay or convert it; try an external player or another source.'
+                    elements.videoPlayer.error?.code === 2
+                        ? 'The provider could not deliver this video. Its link may have expired or returned an access error. Choose another source.'
+                        : 'This source could not be decoded. Some HEVC, Dolby audio and Matroska files require conversion before a browser can play them. Try an H.264/AAC source.'
                 );
                 return;
             }
@@ -1669,7 +1674,7 @@
             : 'No sources in this filter';
 
         const groups = [
-            ['playable', 'Plays in this browser'],
+            ['playable', 'Try in this browser'],
             ['external', 'External apps and provider links'],
             ['app-only', 'App-only or download sources'],
             ['demo', 'Player test — not the selected title']
@@ -1717,7 +1722,7 @@
         elements.streamSelect.disabled = state.visibleStreamIndexes.length === 0;
 
         elements.sourceSummary.textContent =
-            `${counts.all} entries for ${mediaTitle(state.playerMedia)}: ${counts.playable} play here, ` +
+            `${counts.all} entries for ${mediaTitle(state.playerMedia)}: ${counts.playable} can be tried here, ` +
             `${counts.external} provider links, ${counts['app-only']} app-only, ${counts.demo} player test.`;
         elements.sourceCompatibilityHelp.textContent = sourceFilterHelp(state.sourceFilter);
     }
@@ -1896,7 +1901,7 @@
         elements.openInDesktop.hidden = !desktopAvailable;
         elements.openInDesktop.disabled = !desktopAvailable;
         elements.openInVlc.hidden = !playerAvailable;
-        elements.openInOutplayer.hidden = !playerAvailable || !/iPhone|iPad|iPod/i.test(navigator.userAgent);
+        elements.openInOutplayer.hidden = !playerAvailable;
         elements.openInVlc.disabled = !playerAvailable;
         elements.openInOutplayer.disabled = !playerAvailable;
         elements.openInSourceApp.hidden = !appAvailable;
@@ -2009,6 +2014,11 @@
         }).slice(0, 60);
     }
 
+    function embeddedSubtitleTracks() {
+        const external = new Set([...elements.videoPlayer.querySelectorAll('track[data-external]')].map(node => node.track));
+        return [...elements.videoPlayer.textTracks].filter(track => !external.has(track) && ['subtitles', 'captions'].includes(track.kind));
+    }
+
     function renderSubtitlePicker() {
         const stream = state.streams[state.activeStreamIndex];
         const options = subtitleOptions(stream);
@@ -2018,6 +2028,10 @@
         select.replaceChildren(
             makeOption('', options.length ? 'Off' : 'Off (none found)')
         );
+        embeddedSubtitleTracks().forEach((track, index) => {
+            select.append(makeOption('embedded:' + index, track.label || track.language || 'Embedded ' + (index + 1)));
+        });
+        if (state.subtitleObjectURL) select.append(makeOption('local:file', 'Local subtitle file'));
         options.forEach((subtitle, index) => {
             const language = String(subtitle.lang || '').toUpperCase() || '—';
             const provider = subtitle.provider ? ` · ${subtitle.provider}` : '';
@@ -2053,11 +2067,20 @@
             track.track.mode = 'showing';
         }, { once: true });
         elements.videoPlayer.append(track);
+        track.track.mode = 'showing';
         return track;
     }
 
     async function applySubtitleChoice(value) {
+        const subtitleRequest = state.subtitleRequest = (state.subtitleRequest || 0) + 1;
+        const playerRequest = state.playerRequest;
         removeExternalSubtitleTracks();
+        for (const track of elements.videoPlayer.textTracks) track.mode = 'disabled';
+        if (value.startsWith('embedded:')) {
+            const track = embeddedSubtitleTracks()[Number(value.slice(9))];
+            if (track) track.mode = 'showing';
+            return;
+        }
         if (!value) return;
 
         if (value.startsWith('local:')) {
@@ -2084,7 +2107,7 @@
             const bytes=new Uint8Array(size);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
             let content=new TextDecoder().decode(bytes);
             if (!content.trimStart().startsWith('WEBVTT')) content=srtToVtt(content);
-            if (elements.subtitleSelect.value !== value || !elements.playerDialog.open) return;
+            if (subtitleRequest !== state.subtitleRequest || playerRequest !== state.playerRequest || elements.subtitleSelect.value !== value || !elements.playerDialog.open) return;
             if (state.remoteSubtitleURL) URL.revokeObjectURL(state.remoteSubtitleURL);
             state.remoteSubtitleURL=URL.createObjectURL(new Blob([content],{type:'text/vtt'}));
             attachSubtitleTrack(state.remoteSubtitleURL, subtitle.label, subtitle.lang, 'remote');
@@ -2105,9 +2128,13 @@
         const file = event.target.files?.[0];
         event.target.value = '';
         if (!file) return;
+        const playerRequest = state.playerRequest;
+        const selectedStream = state.streams[state.activeStreamIndex];
+        if (file.size > 2000000) return showToast('Choose a subtitle file smaller than 2 MB.', 'warning');
 
         try {
             let content = await file.text();
+            if (!elements.playerDialog.open || playerRequest !== state.playerRequest || selectedStream !== state.streams[state.activeStreamIndex]) return;
             if (!/^WEBVTT/.test(content.trim())) content = srtToVtt(content);
             else if (/(\d{2}:\d{2}:\d{2}),\d{3}/.test(content)) content = srtToVtt(content);
 
@@ -2353,6 +2380,8 @@
     }
 
     function clearVideoElement() {
+        state.subtitleRequest = (state.subtitleRequest || 0) + 1;
+        document.getElementById("player-subtitles-menu")?.removeAttribute("open");
         removeExternalSubtitleTracks();
         destroyHls();
         elements.videoPlayer.pause();
