@@ -1,7 +1,7 @@
 (async () => {
     'use strict';
     await window.TShowAccount?.ready;
-    const { uniqueHistory } = await import('./media-history.mjs?v=20260912-5');
+    const { uniqueHistory } = await import('./media-history.mjs?v=20260912-6');
 
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
@@ -471,10 +471,6 @@
         elements.videoPlayer.textTracks?.addEventListener('addtrack', renderSubtitlePicker);
         elements.videoPlayer.textTracks?.addEventListener('removetrack', renderSubtitlePicker);
         document.getElementById('video-fit')?.addEventListener('change', (event) => { elements.videoStage.dataset.videoFit = event.target.value; });
-        const sizePlayerMenu = () => { const panel = document.querySelector('.subtitle-menu-panel'); if (panel) panel.style.maxHeight = Math.max(80, Math.min(elements.videoStage.clientHeight - 110, elements.videoStage.getBoundingClientRect().bottom - 102 - Math.max(8, elements.playerDialog.getBoundingClientRect().top + 8))) + 'px'; };
-        if (window.ResizeObserver) new ResizeObserver(sizePlayerMenu).observe(elements.videoStage);
-        elements.playerDialog.addEventListener('scroll', sizePlayerMenu, { passive: true });
-        document.getElementById('player-subtitles-menu')?.addEventListener('toggle', sizePlayerMenu);
         document.getElementById('subtitle-size')?.addEventListener('change', (event) => { elements.videoStage.dataset.subtitleSize = event.target.value; });
         elements.subtitleSelect?.addEventListener('change', () => {
             applySubtitleChoice(elements.subtitleSelect.value);
@@ -2387,7 +2383,7 @@
 
     function clearVideoElement() {
         state.subtitleRequest = (state.subtitleRequest || 0) + 1;
-        document.getElementById("player-subtitles-menu")?.removeAttribute("open");
+        document.getElementById("playback-settings")?.removeAttribute("open");
         removeExternalSubtitleTracks();
         destroyHls();
         elements.videoPlayer.pause();

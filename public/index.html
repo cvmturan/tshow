@@ -21,12 +21,12 @@
     <link rel="icon" href="/assets/tshow-icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="/assets/tshow-icon-192.png">
     <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="stylesheet" href="/css/main.css?v=20260912-5">
+    <link rel="stylesheet" href="/css/main.css?v=20260912-6">
     <script src="/vendor/hls/hls.min.js" defer></script>
     <link rel="stylesheet" href="/css/accounts.css?v=20260911-3">
     <script src="/js/accounts.js?v=20260911-4" defer></script>
     <script src="/js/cloudflare-context.js?v=20260911-4" defer></script>
-    <script src="/js/app.js?v=20260912-5" defer></script>
+    <script src="/js/app.js?v=20260912-6" defer></script>
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"TShow","url":"https://showt.fun/","logo":"https://showt.fun/assets/tshow-icon-512.png","email":"support@showt.fun"}</script>
 </head>
 <body>
@@ -540,32 +540,6 @@
         </div>
 
         <div class="video-stage" id="video-stage">
-            <details class="player-subtitles-menu" id="player-subtitles-menu"><summary aria-label="Player options" title="Player options">⋮</summary>
-            <div class="subtitle-menu-panel">
-                <label for="subtitle-select">Subtitles</label>
-                <select id="subtitle-select">
-                    <option value="">Off</option>
-                </select>
-                <button class="button button-quiet" id="open-local-subtitle" type="button">Open file…</button>
-                <label for="video-fit">Picture size</label><select id="video-fit"><option value="fit">Fit - full picture</option><option value="fill">Fill - crop edges</option></select>
-                <label for="subtitle-size">Subtitle text size</label>
-                <select id="subtitle-size"><option value="small">Small</option><option value="normal" selected>Normal</option><option value="large">Large</option></select>
-                <div class="speed-control">
-                <label>Quality<select id="player-quality" disabled><option value="-1">Auto quality</option></select></label>
-<label for="speed-select">Speed</label>
-                <select id="speed-select">
-                    <option value="0.5">0.5×</option>
-                    <option value="0.75">0.75×</option>
-                    <option value="1" selected>1×</option>
-                    <option value="1.25">1.25×</option>
-                    <option value="1.5">1.5×</option>
-                    <option value="2">2×</option>
-                </select>
-            </div>
-                <p class="subtitle-menu-help">Choose a provider subtitle, an available embedded track, or your own SRT/VTT file.</p>
-                <input id="subtitle-file-input" type="file" accept=".vtt,.srt,text/vtt" hidden>
-            </div>
-            </details>
             <video id="video-player" controls playsinline preload="metadata"></video>
             <iframe
                 id="trailer-frame"
@@ -622,6 +596,33 @@
             </div>
             
         </div>
+
+            <details class="playback-settings" id="playback-settings"><summary>Playback settings and subtitles</summary>
+            <div class="playback-settings-panel">
+                <label for="subtitle-select">Subtitles</label>
+                <select id="subtitle-select">
+                    <option value="">Off</option>
+                </select>
+                <button class="button button-quiet" id="open-local-subtitle" type="button">Open file…</button>
+                <label for="video-fit">Picture size</label><select id="video-fit"><option value="fit">Fit - full picture</option><option value="fill">Fill - crop edges</option></select>
+                <label for="subtitle-size">Subtitle text size</label>
+                <select id="subtitle-size"><option value="small">Small</option><option value="normal" selected>Normal</option><option value="large">Large</option></select>
+                <div class="speed-control">
+                <label>Quality<select id="player-quality" disabled><option value="-1">Auto quality</option></select></label>
+<label for="speed-select">Speed</label>
+                <select id="speed-select">
+                    <option value="0.5">0.5×</option>
+                    <option value="0.75">0.75×</option>
+                    <option value="1" selected>1×</option>
+                    <option value="1.25">1.25×</option>
+                    <option value="1.5">1.5×</option>
+                    <option value="2">2×</option>
+                </select>
+            </div>
+                <p class="subtitle-menu-help">Choose a provider subtitle, an available embedded track, or your own SRT/VTT file.</p>
+                <input id="subtitle-file-input" type="file" accept=".vtt,.srt,text/vtt" hidden>
+            </div>
+            </details>
 
         <div class="player-description">
             <div>

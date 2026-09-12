@@ -3844,3 +3844,35 @@ html { color-scheme:dark; }
 .video-stage { width:100%; min-width:0; }
 .player-dialog, .subtitle-menu-panel { scrollbar-color:#515766 #141821; scrollbar-width:thin; }
 .subtitle-menu-panel .speed-control { display:grid; width:100%; gap:8px; }
+
+/* Native video controls remain the only controls over the picture. */
+.playback-settings { margin:0; padding:14px 22px; border-bottom:1px solid var(--line); min-width:0; background:#0f1116; }
+.playback-settings > summary { cursor:pointer; font-weight:650; padding:8px 0; }
+.playback-settings-panel { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; max-width:520px; padding:12px 0; }
+.playback-settings-panel select { width:100%; min-width:0; max-width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:#191c23; }
+.playback-settings-panel .speed-control { width:100%; min-width:0; }
+.player-dialog > *, .player-controls-row > *, .source-picker-header > * { min-width:0; }
+.external-player-control { grid-column:1 / -1; max-width:100%; }
+.external-player-control > div { flex-wrap:wrap; }
+.external-player-control button { max-width:100%; white-space:normal; height:auto; min-height:40px; overflow-wrap:anywhere; }
+.source-summary, .source-compatibility-help, #player-source-title, #player-source-note { overflow-wrap:anywhere; }
+#stream-select { width:100%; max-width:100%; min-width:0; text-overflow:ellipsis; }
+.player-dialog.is-trailer .playback-settings { display:none; }
+@media(max-width:700px) {
+ html { scrollbar-gutter:auto; }
+ body { min-width:0; }
+ .player-dialog { width:100%; max-width:100%; margin-inline:0; border:0; }
+ .player-controls-row { grid-template-columns:minmax(0,1fr); padding:14px; }
+ .source-filter-group { flex-wrap:wrap; overflow-x:visible; }
+ .source-filter { min-height:36px; }
+ .external-player-control > div { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .external-player-control button { width:100%; }
+ .playback-settings { padding:12px 14px; }
+ .player-topbar > div:first-child { min-width:0; flex:1; }
+ #player-title { overflow-wrap:anywhere; }
+ input, select, textarea, .player-controls-row select { font-size:16px; }
+ .video-stage { min-height:0; aspect-ratio:16/9; }
+ .external-source { min-width:0; max-width:100%; padding:14px; overflow:auto; }
+ .external-source h3 { font-size:16px; }
+ .external-source p { font-size:12px; overflow-wrap:anywhere; }
+}
