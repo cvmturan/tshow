@@ -50,6 +50,7 @@ for (const required of [
   'public/index.html',
   'public/css/main.css',
   'public/js/app.js',
+  'public/js/experience.js',
   'public/assets/favicon.svg',
   'public/assets/tshow-logo.png',
   'public/manifest.webmanifest',
