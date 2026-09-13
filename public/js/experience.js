@@ -44,6 +44,7 @@
 
         let activeIndex = -1;
         let optionButtons = [];
+        let dismissing = false;
 
         const readRecent = () => {
             try {
@@ -206,7 +207,13 @@
         };
 
         input.addEventListener('focus', render);
-        input.addEventListener('input', render);
+        input.addEventListener('input', () => {
+            if (dismissing) {
+                setOpen(false);
+                return;
+            }
+            render();
+        });
         form.addEventListener('submit', () => {
             remember(input.value);
             setOpen(false);
@@ -224,7 +231,12 @@
                 optionButtons[activeIndex]?.click();
             } else if (event.key === 'Escape') {
                 event.preventDefault();
+                dismissing = true;
                 setOpen(false);
+                window.setTimeout(() => {
+                    setOpen(false);
+                    dismissing = false;
+                }, 0);
             }
         });
         document.addEventListener('pointerdown', (event) => {
