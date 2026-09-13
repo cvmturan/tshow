@@ -1,7 +1,7 @@
 (async () => {
     'use strict';
     await window.TShowAccount?.ready;
-    const { uniqueHistory } = await import('./media-history.mjs?v=20260913-3');
+    const { uniqueHistory } = await import('./media-history.mjs?v=20260913-4');
 
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
@@ -1478,7 +1478,7 @@
         state.activeAttemptIndex = null;
         state.activeStreamIndex = null;
         state.visibleStreamIndexes = [];
-        state.sourceFilter = 'playable';
+        state.sourceFilter = 'all';
         state.streams = [];
         state.subtitleLibrary = [];
         renderSourcePicker();
@@ -1521,8 +1521,7 @@
             const candidateStreams = Array.isArray(result.streams)
                 ? result.streams.filter((stream) =>
                     stream &&
-                    (stream.url || stream.externalUrl || stream.externalPlayerUrl || stream.externalAppUrl || stream.unsupportedReason) &&
-                    !(stream.attemptUrl && !stream.browserReady && !stream.externalUrl && !stream.externalPlayerUrl && !stream.externalAppUrl)
+                    (stream.url || stream.attemptUrl || stream.externalUrl || stream.externalPlayerUrl || stream.externalAppUrl || stream.unsupportedReason)
                 )
                 : [];
             const conflictingMedia = [state.activeMedia, ...state.recentlyViewed]
@@ -1786,10 +1785,11 @@
         let stream = state.streams[index];
         if (!stream || stream._requestKey !== state.playerRequestKey) return;
         state.activeStreamIndex = index;
-        if (forceAttempt && isSafeWebURL(stream.attemptUrl)) {
+        const attemptURL = [stream.attemptUrl, stream.url, stream.externalPlayerUrl].find(isSafeWebURL);
+        if ((forceAttempt || !stream.browserReady) && attemptURL) {
             stream = {
                 ...stream,
-                url: stream.attemptUrl,
+                url: attemptURL,
                 browserReady: true,
                 playbackMode: stream.format === 'hls' ? 'hls' : 'direct',
                 directFromProvider: true,

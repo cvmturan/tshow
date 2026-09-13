@@ -9,7 +9,7 @@ const worker = fs.readFileSync(new URL('../public/sw.js', import.meta.url), 'utf
 
 test('the production shell loads the interaction layer and refreshes its cache', () => {
   assert.match(index, /experience\.js\?v=20260913-2/);
-  assert.match(worker, /tshow-shell-v38/);
+  assert.match(worker, /tshow-shell-v39/);
   assert.match(worker, /experience\.js\?v=20260913-2/);
 });
 

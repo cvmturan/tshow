@@ -17,7 +17,7 @@ for (const outcome of ['video', 'error', 'audio']) test(`browser check ${outcome
  assert.equal(harness.cleaned(), true);
 });
 
-test('source discovery runs checks and defaults to checked links', () => {
+test('source discovery runs checks and keeps all links available', () => {
  assert.match(source, /checkBrowserSources\(requestId\);/);
- assert.match(source, /state.sourceFilter = 'playable'/);
+ assert.match(source, /state.sourceFilter = 'all'/);
 });
