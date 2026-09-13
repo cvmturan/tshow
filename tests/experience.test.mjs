@@ -8,9 +8,9 @@ const manifest = JSON.parse(fs.readFileSync(new URL('../public/manifest.webmanif
 const worker = fs.readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
 
 test('the production shell loads the interaction layer and refreshes its cache', () => {
-  assert.match(index, /experience\.js\?v=20260913-1/);
-  assert.match(worker, /tshow-shell-v36/);
-  assert.match(worker, /experience\.js\?v=20260913-1/);
+  assert.match(index, /experience\.js\?v=20260913-2/);
+  assert.match(worker, /tshow-shell-v37/);
+  assert.match(worker, /experience\.js\?v=20260913-2/);
 });
 
 test('smart search, mobile navigation and player gestures remain wired', () => {
