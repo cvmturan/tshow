@@ -1,7 +1,7 @@
 (async () => {
     'use strict';
     await window.TShowAccount?.ready;
-    const { uniqueHistory } = await import('./media-history.mjs?v=20260912-6');
+    const { uniqueHistory } = await import('./media-history.mjs?v=20260913-3');
 
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
@@ -502,6 +502,7 @@
         elements.videoPlayer?.addEventListener('error', () => {
             if (!elements.videoPlayer.currentSrc || state.hlsPlayer) return;
             const stream = state.streams[state.activeStreamIndex];
+            if (stream) { stream._browserChecked = false; stream._browserCheckDone = true; renderSourcePicker(); }
             if (stream?.directFromProvider) {
                 updateExternalPlayerActions(stream);
                 showUnsupportedSource(
@@ -1477,7 +1478,7 @@
         state.activeAttemptIndex = null;
         state.activeStreamIndex = null;
         state.visibleStreamIndexes = [];
-        state.sourceFilter = 'all';
+        state.sourceFilter = 'playable';
         state.streams = [];
         state.subtitleLibrary = [];
         renderSourcePicker();
@@ -1550,6 +1551,7 @@
 
             renderSourcePicker();
 
+            checkBrowserSources(requestId);
             loadSubtitleLibrary(streamType, streamId, requestId);
 
             const recommendedIndex = recommendedStreamIndex();
@@ -1569,7 +1571,7 @@
 
     function streamCompatibilityGroup(stream) {
         if (stream.isDemo) return 'demo';
-        if (stream.browserReady) return 'playable';
+        if (stream._browserChecked) return 'playable';
         if (stream.externalUrl || stream.externalPlayerUrl || stream.externalAppUrl) return 'external';
         return 'app-only';
     }
@@ -1626,7 +1628,7 @@
         const browserNative = state.streams
             .map((stream, index) => ({ stream, index }))
             .filter(({ stream }) =>
-                !stream.isDemo && stream.browserReady &&
+                !stream.isDemo && stream._browserChecked &&
                 (stream.playbackMode === 'direct' || stream.playbackMode === 'hls')
             );
         const nativeIndex = smallest(browserNative);
@@ -1634,7 +1636,7 @@
 
         return smallest(state.streams
             .map((stream, index) => ({ stream, index }))
-            .filter(({ stream }) => !stream.isDemo && stream.browserReady));
+            .filter(({ stream }) => !stream.isDemo && stream._browserChecked));
     }
 
     function sourceCounts() {
@@ -1676,7 +1678,7 @@
             : 'No sources in this filter';
 
         const groups = [
-            ['playable', 'Try in this browser'],
+            ['playable', 'Browser checked'],
             ['external', 'External apps and provider links'],
             ['app-only', 'App-only or download sources'],
             ['demo', 'Player test — not the selected title']
@@ -1724,13 +1726,13 @@
         elements.streamSelect.disabled = state.visibleStreamIndexes.length === 0;
 
         elements.sourceSummary.textContent =
-            `${counts.all} entries for ${mediaTitle(state.playerMedia)}: ${counts.playable} can be tried here, ` +
+            `${counts.all} entries for ${mediaTitle(state.playerMedia)}: ${counts.playable} browser checked, ` +
             `${counts.external} provider links, ${counts['app-only']} app-only, ${counts.demo} player test.`;
         elements.sourceCompatibilityHelp.textContent = sourceFilterHelp(state.sourceFilter);
     }
 
     function sourceFilterHelp(filter) {
-        if (filter === 'playable') return 'Direct video links. Playback still depends on the provider response and the codecs supported by this device.';
+        if (filter === 'playable') return state.streams.some(s => s.browserReady && !s.isDemo && !s._browserCheckDone) ? 'Checking sources on this device, two at a time. Only links that load a video frame appear here.' : 'These sources loaded a video frame on this device. Provider availability can change; this does not verify the entire video.';
         if (filter === 'external') return 'User-added sources open directly in external players, source apps, or provider pages. Their video never passes through TShow.';
         if (filter === 'app-only') return 'These are downloads, redirects, torrents, or unknown formats intended for another app.';
         if (filter === 'demo') return 'The short CC0 flower video only tests the player. It is not the movie or episode you selected.';
@@ -1746,6 +1748,7 @@
 
         const name = stream.name || stream.title || `Source ${index + 1}`;
         const badges = [size];
+        if (stream.browserReady && !stream.isDemo) badges.push(stream._browserChecked ? 'browser checked' : stream._browserCheckDone ? 'not verified' : 'checking');
         if (stream.playbackMode === 'proxy' && stream.transcodeLowUrl) {
             badges.push('proxied link');
         } else if (stream.browserReady) {
@@ -1774,9 +1777,9 @@
         elements.externalSourceNote.textContent = counts['app-only']
             ? `The add-on returned ${counts['app-only']} unavailable entries. Select another entry to open it in an external player, source app, or provider page.`
             : 'Select a source below to open it directly on this device. User-added video is not relayed through TShow.';
-        elements.playerSourceTitle.textContent = 'Compatibility check complete';
+        elements.playerSourceTitle.textContent = 'Checking browser playback';
         elements.playerSourceNote.textContent =
-            'TShow will not send unknown downloads or webpage redirects blindly into the video player.';
+            'The Browser checked list fills as sources load a video frame. All sources remain available for external players.';
     }
 
     function applyStream(index, { forceAttempt = false } = {}) {
@@ -2176,24 +2179,68 @@
     }
 
     function toggleDataSaver() {
-        state.dataSaver = false;
-        try {
-            saveStored(STORAGE_KEYS.dataSaver, null);
-        } catch {
-            // The selection still applies for this session when storage is blocked.
-        }
-        updateDataSaverButton();
-        if (!elements.playerDialog.open) return;
-        const smallestIndex = recommendedStreamIndex();
-        if (smallestIndex < 0) return showToast('No direct source is available.', 'warning');
-        applyStream(smallestIndex);
-        showToast('Selected the smallest available source without conversion.');
+        const panel = document.getElementById('playback-settings');
+        panel.open = !panel.open;
+        elements.dataSaverButton.setAttribute('aria-expanded', String(panel.open));
+        if (panel.open) document.getElementById('subtitle-select').focus({ preventScroll: true });
     }
 
-    function updateDataSaverButton() {
-        if (!elements.dataSaverButton) return;
-        elements.dataSaverButton.setAttribute('aria-pressed', String(state.dataSaver));
-        elements.dataSaverButton.classList.toggle('active', state.dataSaver);
+    function updateDataSaverButton() {}
+
+    async function checkBrowserSources(requestId) {
+        const queue = state.streams.filter(stream => stream.browserReady && stream.url && !stream.isDemo);
+        const current = () => requestId === state.playerRequest && elements.playerDialog.open;
+        async function worker() {
+            while (queue.length && current()) {
+                const stream = queue.shift();
+                const passed = await probeBrowserSource(stream, current);
+                if (!current()) return;
+                stream._browserChecked = passed;
+                stream._browserCheckDone = true;
+                renderSourcePicker();
+                if (passed && state.activeStreamIndex == null) {
+                    elements.playerSourceTitle.textContent = 'Browser source found';
+                    elements.playerSourceNote.textContent = 'Choose a checked source below to start playback.';
+                }
+            }
+        }
+        await Promise.all([worker(), worker()]);
+        if (current() && !state.streams.some(s => s._browserChecked)) {
+            elements.playerSourceTitle.textContent = 'No browser source verified';
+            elements.playerSourceNote.textContent = 'None loaded a video frame within the check time. You can still use All sources with an external player.';
+        }
+    }
+
+    function probeBrowserSource(stream, current) {
+        return new Promise(resolve => {
+            const video = document.createElement('video');
+            video.muted = true;
+            video.playsInline = true;
+            video.preload = 'auto';
+            let hls, done = false;
+            const finish = passed => {
+                if (done) return;
+                done = true;
+                clearTimeout(timeout); clearInterval(cancel);
+                video.onloadeddata = video.onerror = null;
+                hls?.destroy(); video.pause(); video.removeAttribute('src'); video.load();
+                resolve(passed);
+            };
+            const timeout = setTimeout(() => finish(false), 12000);
+            const cancel = setInterval(() => { if (!current()) finish(false); }, 250);
+            video.onloadeddata = () => finish(video.videoWidth > 0 && video.readyState >= 2);
+            video.onerror = () => finish(false);
+            try {
+                const isHls = stream.playbackMode === 'hls' || stream.format === 'hls' || /\.m3u8(?:$|[?#])/i.test(stream.url);
+                if (isHls && !video.canPlayType('application/vnd.apple.mpegurl')) {
+                    if (!window.Hls?.isSupported()) return finish(false);
+                    hls = new window.Hls({ maxBufferLength: 1, maxMaxBufferLength: 2, maxBufferSize: 2000000, enableWorker: true });
+                    hls.on(window.Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(stream.url));
+                    hls.on(window.Hls.Events.ERROR, (_event, data) => { if (data.fatal) finish(false); });
+                    hls.attachMedia(video);
+                } else { video.src = stream.url; video.load(); }
+            } catch { finish(false); }
+        });
     }
 
     async function togglePlayerFullscreen() {
@@ -2384,6 +2431,7 @@
     function clearVideoElement() {
         state.subtitleRequest = (state.subtitleRequest || 0) + 1;
         document.getElementById("playback-settings")?.removeAttribute("open");
+        elements.dataSaverButton?.setAttribute('aria-expanded', 'false');
         removeExternalSubtitleTracks();
         destroyHls();
         elements.videoPlayer.pause();

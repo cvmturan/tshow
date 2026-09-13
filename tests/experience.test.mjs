@@ -9,7 +9,7 @@ const worker = fs.readFileSync(new URL('../public/sw.js', import.meta.url), 'utf
 
 test('the production shell loads the interaction layer and refreshes its cache', () => {
   assert.match(index, /experience\.js\?v=20260913-2/);
-  assert.match(worker, /tshow-shell-v37/);
+  assert.match(worker, /tshow-shell-v38/);
   assert.match(worker, /experience\.js\?v=20260913-2/);
 });
 
@@ -26,3 +26,4 @@ test('the PWA exposes useful launch shortcuts', () => {
   assert.equal(manifest.id, '/');
   assert.deepEqual(manifest.shortcuts.map((shortcut) => shortcut.name), ['Movies', 'Series', 'My List']);
 });
+

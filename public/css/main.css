@@ -3794,7 +3794,7 @@ body:not(.legal-page) .site-header .header-clock { grid-column: 4; justify-self:
 .title-detail-view { padding-top: calc(var(--header-height) + 12px); scroll-margin-top: var(--header-height); }
 .title-back-link { position: sticky; z-index: 80; top: calc(var(--header-height) + 10px); left: auto; display: inline-flex; align-items: center; min-height: 40px; margin: 8px 0 -56px clamp(18px, 4vw, 68px); box-shadow: 0 10px 30px rgba(0,0,0,.32); }
 .catalog-section, .addon-catalog-row { position: relative; }
-.media-rail { grid-template-rows: minmax(0, auto); align-items: start; padding: 5px 2px 14px; overflow-x: auto; overflow-y: clip; scroll-behavior: smooth; touch-action: pan-x; }
+.media-rail { grid-template-rows: minmax(0, auto); align-items: start; padding: 5px 2px 14px; overflow-x: auto; overflow-y: clip; scroll-behavior: smooth; touch-action: pan-x pan-y pinch-zoom; }
 .media-rail .media-card { height: 100%; align-self: stretch; transform: none !important; }
 .media-rail .media-card:hover .poster-frame, .media-rail .media-card:focus-visible .poster-frame { transform: scale(1.012); }
 .media-rail .card-copy { min-height: 56px; }
@@ -3877,6 +3877,10 @@ html { color-scheme:dark; }
  .external-source p { font-size:12px; overflow-wrap:anywhere; }
 }
 
+/* The compact CC button owns this panel; no second large disclosure button. */
+.playback-settings > summary { display:none; }
+.playback-settings:not([open]) { display:none; }
+.media-rail { overscroll-behavior-y:auto; }
 /* Cinematic interaction layer: search suggestions, mobile dock and gesture feedback. */
 .smart-search-panel {
     position: fixed;

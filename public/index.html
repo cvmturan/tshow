@@ -21,12 +21,12 @@
     <link rel="icon" href="/assets/tshow-icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="/assets/tshow-icon-192.png">
     <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="stylesheet" href="/css/main.css?v=20260913-1">
+    <link rel="stylesheet" href="/css/main.css?v=20260913-3">
     <script src="/vendor/hls/hls.min.js" defer></script>
     <link rel="stylesheet" href="/css/accounts.css?v=20260911-3">
     <script src="/js/accounts.js?v=20260911-4" defer></script>
     <script src="/js/cloudflare-context.js?v=20260911-4" defer></script>
-    <script src="/js/app.js?v=20260912-6" defer></script>
+    <script src="/js/app.js?v=20260913-3" defer></script>
     <script src="/js/experience.js?v=20260913-2" defer></script>
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"TShow","url":"https://showt.fun/","logo":"https://showt.fun/assets/tshow-icon-512.png","email":"support@showt.fun"}</script>
 </head>
@@ -572,7 +572,7 @@
                     </div>
                     <div class="source-filter-group" id="source-filter-group" aria-label="Filter video sources">
                         <button class="source-filter" type="button" data-source-filter="all" aria-pressed="true">All <span>0</span></button>
-                        <button class="source-filter" type="button" data-source-filter="playable" aria-pressed="false">Try in browser <span>0</span></button>
+                        <button class="source-filter" type="button" data-source-filter="playable" aria-pressed="false">Browser checked <span>0</span></button>
                         <button class="source-filter" type="button" data-source-filter="external" aria-pressed="false">Links <span>0</span></button>
                         <button class="source-filter" type="button" data-source-filter="app-only" aria-pressed="false">App-only <span>0</span></button>
                         <button class="source-filter" type="button" data-source-filter="demo" aria-pressed="false">Player test <span>0</span></button>
@@ -583,7 +583,7 @@
                 <p class="source-compatibility-help" id="source-compatibility-help">Choose a source to see what the browser can do with it.</p>
             </div>
             <div class="speed-control data-saver-control">
-                <button class="button button-quiet" id="data-saver-button" type="button" aria-pressed="false" title="Select the smallest available direct source without conversion">Smallest file</button>
+                <button class="button button-quiet" id="data-saver-button" type="button" aria-expanded="false" aria-controls="playback-settings" title="Subtitles and playback settings">CC · Subtitles</button>
             </div>
             <div class="speed-control external-player-control" id="external-player-actions" hidden>
                 <span class="control-label">External player</span>
