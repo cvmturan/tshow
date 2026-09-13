@@ -223,6 +223,7 @@
                 event.preventDefault();
                 optionButtons[activeIndex]?.click();
             } else if (event.key === 'Escape') {
+                event.preventDefault();
                 setOpen(false);
             }
         });
