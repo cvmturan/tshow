@@ -1,8 +1,8 @@
 (async () => {
     'use strict';
     await window.TShowAccount?.ready;
-    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260913-5');
-    const { uniqueHistory } = await import('./media-history.mjs?v=20260913-5');
+    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260914-1');
+    const { uniqueHistory } = await import('./media-history.mjs?v=20260914-1');
 
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
@@ -1563,7 +1563,6 @@
 
             renderSourcePicker();
 
-            checkBrowserSources(requestId);
             loadSubtitleLibrary(streamType, streamId, requestId);
 
             const recommendedIndex = recommendedStreamIndex();
@@ -1744,7 +1743,7 @@
     }
 
     function sourceFilterHelp(filter) {
-        if (filter === 'playable') return state.streams.some(s => s.browserReady && !s.isDemo && !s._browserCheckDone) ? 'Checking sources on this device, two at a time. Only links that load a video frame appear here.' : 'These sources loaded a video frame on this device. Provider availability can change; this does not verify the entire video.';
+        if (filter === 'playable') return 'Optional checks verify only the start of a video. Choose All to try any direct source. Checks stop when you select a source.';
         if (filter === 'external') return 'User-added sources open directly in external players, source apps, or provider pages. Their video never passes through TShow.';
         if (filter === 'app-only') return 'These are downloads, redirects, torrents, or unknown formats intended for another app.';
         if (filter === 'demo') return 'The short CC0 flower video only tests the player. It is not the movie or episode you selected.';
@@ -1752,15 +1751,16 @@
     }
 
     function streamOptionLabel(stream, index, mirrorNumber = 1, mirrorTotal = 1) {
-        const selectedTitle = stream._displayTitle || mediaTitle(state.playerMedia) || 'Selected title';
+        const selectedTitle = String(stream._displayTitle || mediaTitle(state.playerMedia) || 'Selected title').slice(0,55);
         const size = stream.sizeLabel || 'size unknown';
         if (stream.isDemo) {
             return `${selectedTitle} · ${stream.title || stream.name || 'Public sample'} · ${size} · player test only`;
         }
 
-        const name = stream.name || stream.title || `Source ${index + 1}`;
+        const rawName = String(stream.name || stream.title || `Source ${index + 1}`).replace(/\s+/g, ' ');
+        const name = rawName.length > 80 ? rawName.slice(0,77) + '…' : rawName;
         const badges = [size];
-        if (stream.browserReady && !stream.isDemo) badges.push(stream._browserChecked ? 'browser checked' : stream._browserCheckDone ? 'not verified' : 'checking');
+        if (stream.browserReady && !stream.isDemo) badges.push(stream._browserChecked ? 'browser checked' : stream._browserCheckDone ? 'not verified' : 'not checked');
         if (stream.playbackMode === 'proxy' && stream.transcodeLowUrl) {
             badges.push('proxied link');
         } else if (stream.browserReady) {
@@ -1789,9 +1789,9 @@
         elements.externalSourceNote.textContent = counts['app-only']
             ? `The add-on returned ${counts['app-only']} unavailable entries. Select another entry to open it in an external player, source app, or provider page.`
             : 'Select a source below to open it directly on this device. User-added video is not relayed through TShow.';
-        elements.playerSourceTitle.textContent = 'Checking browser playback';
+        elements.playerSourceTitle.textContent = 'Choose a source';
         elements.playerSourceNote.textContent =
-            'The Browser checked list fills as sources load a video frame. All sources remain available for external players.';
+            'Select a direct link to play in this browser. Link checking is optional and stops before playback.';
     }
 
     function applyStream(index, { forceAttempt = false } = {}) {
@@ -1799,6 +1799,7 @@
         if (!stream || stream._requestKey !== state.playerRequestKey) return;
         savePlaybackProgress(true);
         state.activeStreamIndex = index;
+        state.browserProbes?.forEach(cancel => cancel());
         const attemptURL = [stream.attemptUrl, stream.url, stream.externalPlayerUrl].find(isSafeWebURL);
         if ((forceAttempt || !stream.browserReady) && attemptURL) {
             stream = {
@@ -1813,6 +1814,7 @@
 
         elements.streamSelect.value = String(index);
         document.getElementById("recover-source-button").hidden = true;
+        document.getElementById('resume-playback-button').hidden = true;
         clearVideoElement();
         state.transcodeTried = false;
         state.activeHlsURL = null;
@@ -2070,6 +2072,8 @@
     }
     function saveWatchingPrefs(patch) { saveStored(STORAGE_KEYS.playerPreferences, JSON.stringify({...watchingPrefs(),...patch})); }
     function setupWatchingTools() {
+        document.getElementById('check-sources-button').addEventListener('click',async()=>{if(state.activeStreamIndex!=null)return showToast('Close and reopen sources before checking, so playback is not interrupted.');const button=document.getElementById('check-sources-button');button.disabled=true;button.textContent='Checking…';try{await checkBrowserSources(state.playerRequest);}finally{button.disabled=false;button.textContent='Check links';}});
+        elements.videoPlayer.addEventListener('playing',()=>{const stream=state.streams[state.activeStreamIndex];if(stream&&!stream.isDemo){stream._browserChecked=true;stream._browserCheckDone=true;renderSourcePicker();}});
         const prefs=watchingPrefs();
         const theme=document.getElementById('theme-select');theme.value=['violet','blue','emerald','classic'].includes(prefs.theme)?prefs.theme:'violet';document.documentElement.dataset.theme=theme.value;
         theme.addEventListener('change',()=>{document.documentElement.dataset.theme=theme.value;saveWatchingPrefs({theme:theme.value});});
@@ -2096,7 +2100,8 @@
             state.playingScope = state.playerRequestKey;
             const pending=state.pendingResume;const saved=state.continueEntry;
             const position=pending?.key===state.playerRequestKey&&pending.index===state.activeStreamIndex?pending.position:saved?.media&&mediaKey(saved.media)===mediaKey(state.playerMedia)&&saved.videoId===state.playerVideoId?saved.currentTime:0;
-            state.pendingResume=null;const target=resumePosition(position,elements.videoPlayer.duration);if(target)elements.videoPlayer.currentTime=target;
+            state.pendingResume=null;const target=resumePosition(position,elements.videoPlayer.duration);
+            const resume=document.getElementById('resume-playback-button');resume.hidden=!target;resume.textContent='Resume at '+Math.floor(target/60)+':'+String(Math.floor(target%60)).padStart(2,'0');resume.onclick=()=>{try{elements.videoPlayer.currentTime=target;attemptVideoPlay();resume.hidden=true;}catch{showToast('This source does not support seeking yet.','warning');}};
         });
         let stalledTimer;
         elements.videoPlayer.addEventListener('waiting',()=>{clearTimeout(stalledTimer);const key=state.playerRequestKey;const index=state.activeStreamIndex;stalledTimer=setTimeout(()=>{if(elements.playerDialog.open&&key===state.playerRequestKey&&index===state.activeStreamIndex&&elements.videoPlayer.readyState<3)document.getElementById('recover-source-button').hidden=false;},15000);});
@@ -2267,7 +2272,7 @@
 
     async function checkBrowserSources(requestId) {
         const queue = state.streams.filter(stream => stream.browserReady && stream.url && !stream.isDemo);
-        const current = () => requestId === state.playerRequest && elements.playerDialog.open;
+        const current = () => requestId === state.playerRequest && elements.playerDialog.open && state.activeStreamIndex == null;
         async function worker() {
             while (queue.length && current()) {
                 const stream = queue.shift();
@@ -2296,14 +2301,18 @@
             video.playsInline = true;
             video.preload = 'auto';
             let hls, done = false;
+            state.browserProbes ||= new Set();
+            const stop = () => finish(false);
             const finish = passed => {
                 if (done) return;
                 done = true;
+                state.browserProbes.delete(stop);
                 clearTimeout(timeout); clearInterval(cancel);
                 video.onloadeddata = video.onerror = null;
                 hls?.destroy(); video.pause(); video.removeAttribute('src'); video.load();
                 resolve(passed);
             };
+            state.browserProbes.add(stop);
             const timeout = setTimeout(() => finish(false), 12000);
             const cancel = setInterval(() => { if (!current()) finish(false); }, 250);
             video.onloadeddata = () => finish(video.videoWidth > 0 && video.readyState >= 2);

@@ -12,7 +12,6 @@
 
     function init() {
         setupSmartSearch();
-        setupMobileDock();
         setupPlayerGestures();
         setupConnectivityNotice();
         setupCardLabels();
@@ -244,60 +243,6 @@
         });
         window.addEventListener('resize', place, { passive: true });
         window.addEventListener('scroll', place, { passive: true });
-    }
-
-    function setupMobileDock() {
-        if (document.getElementById('mobile-dock')) return;
-        const dock = document.createElement('nav');
-        dock.id = 'mobile-dock';
-        dock.className = 'mobile-dock';
-        dock.setAttribute('aria-label', 'Quick navigation');
-        const destinations = [
-            ['⌂', 'Home', 'home', () => document.querySelector('.nav-link[data-view="home"]')?.click()],
-            ['✦', 'Explore', 'explore', () => document.querySelector('.nav-link[data-view="explore"]')?.click()],
-            ['⌕', 'Search', 'search', () => document.getElementById('search-input')?.focus()],
-            ['＋', 'My List', 'list', () => document.querySelector('.nav-link[data-view="list"]')?.click()],
-            ['☰', 'More', 'more', () => document.getElementById('menu-button')?.click()]
-        ];
-        destinations.forEach(([icon, label, key, action]) => {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.dataset.dock = key;
-            const iconNode = document.createElement('span');
-            iconNode.setAttribute('aria-hidden', 'true');
-            iconNode.textContent = icon;
-            const copy = document.createElement('small');
-            copy.textContent = label;
-            button.append(iconNode, copy);
-            button.addEventListener('click', () => transition(action));
-            dock.append(button);
-        });
-        document.body.append(dock);
-
-        const sync = () => {
-            const active = document.querySelector('.sidebar-nav .nav-link.is-active')?.dataset.view || '';
-            const searchIsVisible = !document.querySelector('[data-view-panel="search"]')?.hidden;
-            const sidebarIsOpen = document.body.classList.contains('sidebar-open');
-            dock.querySelectorAll('button').forEach((button) => {
-                const matches = button.dataset.dock === active ||
-                    (button.dataset.dock === 'search' && searchIsVisible) ||
-                    (button.dataset.dock === 'more' && sidebarIsOpen);
-                button.classList.toggle('is-active', matches);
-                if (matches) button.setAttribute('aria-current', 'page');
-                else button.removeAttribute('aria-current');
-            });
-        };
-        sync();
-        const sidebar = document.querySelector('.sidebar-nav');
-        if (sidebar) new MutationObserver(sync).observe(sidebar, {
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['class']
-        });
-        new MutationObserver(sync).observe(document.body, {
-            attributes: true,
-            attributeFilter: ['class']
-        });
     }
 
     function setupPlayerGestures() {

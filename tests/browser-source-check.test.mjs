@@ -7,7 +7,7 @@ const probe = source.slice(source.indexOf('    function probeBrowserSource('), s
 function setup(outcome) {
   let cleaned = false;
   const video = { videoWidth: outcome === 'audio' ? 0 : 1920, readyState: 2, canPlayType: () => '', pause() {}, removeAttribute() { cleaned = true; }, load() { if (!cleaned) queueMicrotask(() => outcome === 'error' ? this.onerror?.() : this.onloadeddata?.()); } };
-  const context = { document: { createElement: () => video }, window: {}, setTimeout, clearTimeout, setInterval, clearInterval };
+  const context = { state: {}, document: { createElement: () => video }, window: {}, setTimeout, clearTimeout, setInterval, clearInterval };
   vm.createContext(context); vm.runInContext(probe, context);
   return { run: () => context.probeBrowserSource({url:'https://example.com/video.mp4'}, () => true), cleaned: () => cleaned };
 }
@@ -18,6 +18,7 @@ for (const outcome of ['video', 'error', 'audio']) test(`browser check ${outcome
 });
 
 test('source discovery runs checks and keeps all links available', () => {
- assert.match(source, /checkBrowserSources\(requestId\);/);
+ assert.match(source, /checkBrowserSources\(state.playerRequest\)/);
+ assert.doesNotMatch(source, /checkBrowserSources\(requestId\);/);
  assert.match(source, /state.sourceFilter = 'all'/);
 });

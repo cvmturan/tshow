@@ -21,13 +21,13 @@
     <link rel="icon" href="/assets/tshow-icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="/assets/tshow-icon-192.png">
     <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="stylesheet" href="/css/main.css?v=20260913-5">
+    <link rel="stylesheet" href="/css/main.css?v=20260914-1">
     <script src="/vendor/hls/hls.min.js" defer></script>
     <link rel="stylesheet" href="/css/accounts.css?v=20260911-3">
     <script src="/js/accounts.js?v=20260911-4" defer></script>
     <script src="/js/cloudflare-context.js?v=20260911-4" defer></script>
-    <script src="/js/app.js?v=20260913-5" defer></script>
-    <script src="/js/experience.js?v=20260913-2" defer></script>
+    <script src="/js/app.js?v=20260914-1" defer></script>
+    <script src="/js/experience.js?v=20260914-1" defer></script>
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"TShow","url":"https://showt.fun/","logo":"https://showt.fun/assets/tshow-icon-512.png","email":"support@showt.fun"}</script>
 </head>
 <body>
@@ -579,7 +579,7 @@
                     </div>
                 </div>
                 <label class="sr-only" for="stream-select">Choose a video source</label>
-                <div class="watching-toolbar source-refinements"><label>Quality<select id="source-quality"><option value="">Any quality</option><option value="2160">4K / 2160p</option><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option></select></label><label>Language<input id="source-language" placeholder="e.g. Hindi" maxlength="30"></label><label>File size<select id="source-size"><option value="">Any size</option><option value="1">Up to 1 GB</option><option value="3">Up to 3 GB</option><option value="5">Up to 5 GB</option><option value="10">Up to 10 GB</option></select></label><button id="reset-source-filters" class="button button-quiet" type="button">Reset filters</button></div><select id="stream-select" aria-describedby="source-summary source-compatibility-help player-source-note"></select>
+                <details class="source-refine-panel"><summary>Filter sources</summary><div class="watching-toolbar source-refinements"><label>Quality<select id="source-quality"><option value="">Any quality</option><option value="2160">4K / 2160p</option><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option></select></label><label>Language<input id="source-language" placeholder="e.g. Hindi" maxlength="30"></label><label>File size<select id="source-size"><option value="">Any size</option><option value="1">Up to 1 GB</option><option value="3">Up to 3 GB</option><option value="5">Up to 5 GB</option><option value="10">Up to 10 GB</option></select></label><button id="reset-source-filters" class="button button-quiet" type="button">Reset filters</button></div></details><button id="check-sources-button" class="button button-quiet" type="button">Check links</button><select id="stream-select" aria-describedby="source-summary source-compatibility-help player-source-note"></select>
                 <p class="source-compatibility-help" id="source-compatibility-help">Choose a source to see what the browser can do with it.</p>
             </div>
             <div class="speed-control data-saver-control">
@@ -625,7 +625,7 @@
             </div>
             </details>
 
-        <div class="watching-toolbar player-followup"><button id="recover-source-button" class="button button-quiet" type="button" hidden>Try another source · keep position</button><button id="next-episode-button" class="button button-primary" type="button" hidden>Next episode</button></div><div class="player-description">
+        <div class="watching-toolbar player-followup"><button id="resume-playback-button" type="button" class="button button-quiet" hidden>Resume playback</button><button id="recover-source-button" class="button button-quiet" type="button" hidden>Try another source · keep position</button><button id="next-episode-button" class="button button-primary" type="button" hidden>Next episode</button></div><div class="player-description">
             <div>
                 <strong id="player-source-title">Public demo</strong>
                 <p id="player-source-note">Short CC0 sample used only to test browser playback.</p>

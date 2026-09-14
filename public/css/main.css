@@ -4202,3 +4202,25 @@ body:not(.legal-page) { background:radial-gradient(ellipse at 85% 0,rgba(124,58,
 .source-filter[aria-pressed="true"],#data-saver-button { color:var(--accent-light);border-color:var(--accent); }
 body:not(.legal-page) { background:radial-gradient(ellipse at 85% 0,hsl(var(--theme-hue) var(--theme-saturation) 45% / .1),transparent 42rem),#090b10; }
 @media(max-width:700px) { .watching-toolbar input,.watching-toolbar select,.settings-card select { font-size:16px; }.player-followup { padding:0 14px; }.source-refinements label { flex-basis:100px; } }
+/* Sources remain inside the visual viewport, including coarse-pointer tablets. */
+.mobile-dock { display:none !important; }
+.source-refine-panel { min-width:0;width:100%; }
+.source-refine-panel > summary { cursor:pointer;padding:8px 0;color:var(--muted);font-size:14px; }
+#check-sources-button { justify-self:start; }
+.player-dialog,.media-dialog { max-width:calc(100vw - 20px); }
+.player-dialog[open],.media-dialog[open] { animation:none;transform:none; }
+.source-picker,.source-picker-header,.source-filter-group,.player-controls-row { min-width:0;max-width:100%; }
+#stream-select { width:100%;min-width:0;max-width:100%;font-size:16px; }
+@media (max-width:760px), (pointer:coarse) {
+ body:not(.legal-page) { padding-bottom:0; }
+ .site-footer { padding-bottom:28px; }
+ .toast-region { bottom:calc(16px + env(safe-area-inset-bottom)); }
+ .player-dialog,.media-dialog { width:100%;max-width:100%;max-height:100dvh;margin:0;border-radius:0; }
+ .player-controls-row { display:flex;flex-direction:column;align-items:stretch;padding:12px;gap:12px; }
+ .player-dialog input,.player-dialog select,.player-dialog textarea,.media-dialog input,.media-dialog select { font-size:16px !important; }
+ .source-picker-header { flex-direction:column;align-items:stretch; }
+ .source-filter-group { display:flex;flex-wrap:wrap; }
+ .source-refinements { display:grid;grid-template-columns:minmax(0,1fr); }
+ .watching-toolbar label { width:100%;min-width:0; }
+ .player-followup { padding:0 12px; }
+}
