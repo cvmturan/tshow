@@ -1,7 +1,8 @@
 (async () => {
     'use strict';
     await window.TShowAccount?.ready;
-    const { uniqueHistory } = await import('./media-history.mjs?v=20260913-4');
+    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260913-5');
+    const { uniqueHistory } = await import('./media-history.mjs?v=20260913-5');
 
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
@@ -10,7 +11,8 @@
         dataSaver: 'streamflix:data-saver:v1',
         addonURLs: 'streamflix:addons:v1',
         addonClientId: 'streamflix:addon-client:v1',
-        region: 'tshow:region:v1'
+        region: 'tshow:region:v1',
+        playerPreferences: 'tshow:player:v1'
     };
     const HOME_CACHE_KEY = 'tshow:home-catalog:v1';
     const STARTER_CATALOG = {
@@ -106,6 +108,7 @@
     async function init() {
         cacheElements();
         bindEvents();
+        setupWatchingTools();
         updateListCount();
         renderContinueWatching();
         renderRecentlyViewed();
@@ -503,6 +506,7 @@
             if (!elements.videoPlayer.currentSrc || state.hlsPlayer) return;
             const stream = state.streams[state.activeStreamIndex];
             if (stream) { stream._browserChecked = false; stream._browserCheckDone = true; renderSourcePicker(); }
+            document.getElementById('recover-source-button').hidden = false;
             if (stream?.directFromProvider) {
                 updateExternalPlayerActions(stream);
                 showUnsupportedSource(
@@ -1462,11 +1466,18 @@
     }
 
     async function playMedia(media, details = null, requestedVideoId = null) {
+        savePlaybackProgress(true);
+        clearVideoElement();
+        state.pendingResume = null;
+        state.recoveryTried = new Set();
         const requestId = ++state.playerRequest;
         const selectedVideoId = mediaType(media) === 'movie' ? null : (requestedVideoId || null);
         state.playerRequestKey = `pending:${requestId}`;
         resetTrailerFrame();
         state.playerMedia = serializeMedia(media);
+        state.playerVideoId = selectedVideoId;
+        state.playerDetails = null;
+        document.getElementById("next-episode-button").hidden = true;
         elements.playerTitle.textContent = mediaTitle(media);
         elements.videoPlayer.poster = imageURL(media.backdrop_path, 'w1280') || '';
         elements.videoLoading.hidden = false;
@@ -1504,6 +1515,8 @@
                 }
             }
 
+            state.playerDetails = resolvedDetails;
+            updateNextEpisode();
             const streamType = mediaType(media) === 'movie' ? 'movie' : 'series';
             const streamId = selectedVideoId ||
                 (streamType === 'movie' ? null : resolvedDetails.behaviorHints?.defaultVideoId) ||
@@ -1667,7 +1680,7 @@
             .map((_stream, index) => index)
             .filter((index) => state.sourceFilter === 'all' ||
                 streamCompatibilityGroup(state.streams[index]) === state.sourceFilter
-            );
+            ).filter(index => matchesSource(state.streams[index], state.extraSourceFilters));
 
         const placeholder = document.createElement('option');
         placeholder.value = '';
@@ -1735,7 +1748,7 @@
         if (filter === 'external') return 'User-added sources open directly in external players, source apps, or provider pages. Their video never passes through TShow.';
         if (filter === 'app-only') return 'These are downloads, redirects, torrents, or unknown formats intended for another app.';
         if (filter === 'demo') return 'The short CC0 flower video only tests the player. It is not the movie or episode you selected.';
-        return 'Use the filters to separate playable, external, app-only, and player-test entries.';
+        return 'Quality and language use provider labels. Size limits exclude entries without a known size. Browser checked remains optional.';
     }
 
     function streamOptionLabel(stream, index, mirrorNumber = 1, mirrorTotal = 1) {
@@ -1784,6 +1797,7 @@
     function applyStream(index, { forceAttempt = false } = {}) {
         let stream = state.streams[index];
         if (!stream || stream._requestKey !== state.playerRequestKey) return;
+        savePlaybackProgress(true);
         state.activeStreamIndex = index;
         const attemptURL = [stream.attemptUrl, stream.url, stream.externalPlayerUrl].find(isSafeWebURL);
         if ((forceAttempt || !stream.browserReady) && attemptURL) {
@@ -1798,6 +1812,7 @@
         }
 
         elements.streamSelect.value = String(index);
+        document.getElementById("recover-source-button").hidden = true;
         clearVideoElement();
         state.transcodeTried = false;
         state.activeHlsURL = null;
@@ -2045,6 +2060,69 @@
         if ([...select.options].some((option) => option.value === current)) {
             select.value = current;
         }
+        restorePreferredSubtitle();
+    }
+
+
+    function watchingPrefs() {
+        const value=loadStoredValue(STORAGE_KEYS.playerPreferences);
+        return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    }
+    function saveWatchingPrefs(patch) { saveStored(STORAGE_KEYS.playerPreferences, JSON.stringify({...watchingPrefs(),...patch})); }
+    function setupWatchingTools() {
+        const prefs=watchingPrefs();
+        const theme=document.getElementById('theme-select');theme.value=['violet','blue','emerald','classic'].includes(prefs.theme)?prefs.theme:'violet';document.documentElement.dataset.theme=theme.value;
+        theme.addEventListener('change',()=>{document.documentElement.dataset.theme=theme.value;saveWatchingPrefs({theme:theme.value});});
+        const preferred=document.getElementById('preferred-subtitle');preferred.value=prefs.subtitleLanguage||'off';
+        preferred.addEventListener('change',()=>{saveWatchingPrefs({subtitleLanguage:preferred.value});elements.subtitleSelect.value='';renderSubtitlePicker();});
+        const size=document.getElementById('subtitle-size');size.value=['small','normal','large'].includes(prefs.subtitleSize)?prefs.subtitleSize:'normal';elements.videoStage.dataset.subtitleSize=size.value;
+        size.addEventListener('change',()=>saveWatchingPrefs({subtitleSize:size.value}));
+        elements.subtitleSelect.addEventListener('change',()=>{const value=elements.subtitleSelect.value;const lang=value.startsWith('embedded:')?embeddedSubtitleTracks()[Number(value.slice(9))]?.language:subtitleOptions(state.streams[state.activeStreamIndex])[Number(value)]?.lang;if(!value)saveWatchingPrefs({subtitleLanguage:'off'});else if(lang)saveWatchingPrefs({subtitleLanguage:lang});});
+        for(const id of ['source-quality','source-language','source-size'])document.getElementById(id).addEventListener('input',()=>{state.extraSourceFilters={quality:document.getElementById('source-quality').value,language:document.getElementById('source-language').value,maxSize:document.getElementById('source-size').value};renderSourcePicker();});
+        document.getElementById('reset-source-filters').addEventListener('click',()=>{for(const id of ['source-quality','source-language','source-size'])document.getElementById(id).value='';state.extraSourceFilters={};renderSourcePicker();});
+        document.getElementById('next-episode-button').addEventListener('click',()=>{const next=nextEpisode(state.playerDetails,state.playerVideoId);if(next)playMedia(state.playerMedia,state.playerDetails,next.id);});
+        document.getElementById('recover-source-button').addEventListener('click',()=>{
+            const current=state.activeStreamIndex;
+            state.recoveryTried ||= new Set();state.recoveryTried.add(current);
+            const candidates=state.streams.map((stream,index)=>({stream,index})).filter(({stream,index})=>index!==current&&!state.recoveryTried.has(index)&&!stream.isDemo&&[stream.url,stream.attemptUrl,stream.externalPlayerUrl].some(isSafeWebURL)).sort((a,b)=>Number(Boolean(b.stream._browserChecked))-Number(Boolean(a.stream._browserChecked)));
+            if(!candidates.length)return showToast('No alternative direct source is available.','warning');
+            const saved=state.continueEntry;
+            const matching=saved?.media&&mediaKey(saved.media)===mediaKey(state.playerMedia)&&saved.videoId===state.playerVideoId;
+            const position=elements.videoPlayer.currentTime||(matching?saved.currentTime:0)||0;
+            state.pendingResume={position,index:candidates[0].index,key:state.playerRequestKey};applyStream(candidates[0].index);
+            showToast('Trying another source. The time position is restored when its timeline loads.');
+        });
+        elements.videoPlayer.addEventListener('loadedmetadata',()=>{
+            state.playingScope = state.playerRequestKey;
+            const pending=state.pendingResume;const saved=state.continueEntry;
+            const position=pending?.key===state.playerRequestKey&&pending.index===state.activeStreamIndex?pending.position:saved?.media&&mediaKey(saved.media)===mediaKey(state.playerMedia)&&saved.videoId===state.playerVideoId?saved.currentTime:0;
+            state.pendingResume=null;const target=resumePosition(position,elements.videoPlayer.duration);if(target)elements.videoPlayer.currentTime=target;
+        });
+        let stalledTimer;
+        elements.videoPlayer.addEventListener('waiting',()=>{clearTimeout(stalledTimer);const key=state.playerRequestKey;const index=state.activeStreamIndex;stalledTimer=setTimeout(()=>{if(elements.playerDialog.open&&key===state.playerRequestKey&&index===state.activeStreamIndex&&elements.videoPlayer.readyState<3)document.getElementById('recover-source-button').hidden=false;},15000);});
+        elements.videoPlayer.addEventListener('playing',()=>{clearTimeout(stalledTimer);document.getElementById('recover-source-button').hidden=true;});
+        document.getElementById('collection-select').addEventListener('change',event=>{state.collectionId=event.target.value;state.editCollection=false;renderWatchlist();});
+        document.getElementById('edit-collection').addEventListener('click',()=>{state.editCollection=!state.editCollection;renderWatchlist();});
+        document.getElementById('create-collection').addEventListener('click',()=>{const input=document.getElementById('collection-name');const name=input.value.trim();if(!name)return;const prefs=watchingPrefs();const collections=Array.isArray(prefs.collections)?prefs.collections:[];if(collections.length>=30)return showToast('You can keep up to 30 collections.','warning');const existing=collections.find(c=>c.name.toLowerCase()===name.toLowerCase());const id=existing?.id||crypto.randomUUID();if(!existing)collections.push({id,name,keys:[]});saveWatchingPrefs({collections});input.value='';state.collectionId=id;state.editCollection=true;renderWatchlist();});
+        renderCollections();
+    }
+    function renderCollections() {
+        const select=document.getElementById('collection-select');if(!select)return;
+        const collections=watchingPrefs().collections||[];select.replaceChildren(makeOption('','All titles'),...collections.map(c=>makeOption(c.id,c.name)));select.value=state.collectionId||'';
+        const edit=document.getElementById('edit-collection');edit.hidden=!state.collectionId;edit.textContent=state.editCollection?'Done':'Manage titles';
+    }
+    function updateNextEpisode() {
+        const button=document.getElementById('next-episode-button');const next=nextEpisode(state.playerDetails,state.playerVideoId);button.hidden=!next;if(next)button.textContent='Next episode · S'+next.season+' E'+next.episode;
+    }
+    function restorePreferredSubtitle() {
+        const select=elements.subtitleSelect;if(select.value)return;
+        const language=watchingPrefs().subtitleLanguage;if(!language||language==='off')return;
+        const aliases={en:'eng',hi:'hin',es:'spa',fr:'fra',de:'deu',ja:'jpn',ko:'kor',ta:'tam',te:'tel'};
+        const match=lang=>lang && (lang.toLowerCase()===language.toLowerCase()||lang.toLowerCase()===aliases[language]);
+        const embedded=embeddedSubtitleTracks().findIndex(t=>match(t.language));
+        const remote=subtitleOptions(state.streams[state.activeStreamIndex]).findIndex(t=>match(t.lang));
+        const value=embedded>=0?'embedded:'+embedded:remote>=0?String(remote):'';
+        if(value){select.value=value;applySubtitleChoice(value);}
     }
 
     function makeOption(value, label) {
@@ -2377,6 +2455,7 @@
     }
 
     function showUnsupportedSource(message) {
+        document.getElementById("recover-source-button").hidden = false;
         elements.videoLoading.hidden = true;
         elements.videoPlayer.hidden = true;
         elements.externalSourceTitle.textContent = 'This source cannot play here';
@@ -2429,6 +2508,7 @@
     }
 
     function clearVideoElement() {
+        state.playingScope = null;
         state.subtitleRequest = (state.subtitleRequest || 0) + 1;
         document.getElementById("playback-settings")?.removeAttribute("open");
         elements.dataSaverButton?.setAttribute('aria-expanded', 'false');
@@ -2441,7 +2521,7 @@
     }
 
     function savePlaybackProgress(force = false) {
-        if (!state.playerMedia || !Number.isFinite(elements.videoPlayer.duration)) return;
+        if (!state.playerMedia || state.playingScope !== state.playerRequestKey || state.streams[state.activeStreamIndex]?.isDemo || !Number.isFinite(elements.videoPlayer.duration)) return;
 
         const now = Date.now();
         if (!force && now - state.lastProgressSave < 15_000) return;
@@ -2449,6 +2529,7 @@
 
         const entry = {
             media: state.playerMedia,
+            videoId: state.playerVideoId,
             currentTime: Math.round(elements.videoPlayer.currentTime),
             duration: Math.round(elements.videoPlayer.duration),
             updatedAt: now
@@ -2509,8 +2590,14 @@
     }
 
     function renderWatchlist() {
-        const items = state.watchlist.map((item) => normalizeMedia(item));
-        elements.listGrid.replaceChildren(...items.map((item) => createMediaCard(item)));
+        renderCollections();
+        const collection = watchingPrefs().collections?.find(c => c.id === state.collectionId);
+        const items = state.watchlist.map((item) => normalizeMedia(item)).filter(item => !collection || state.editCollection || collection.keys.includes(mediaKey(item)));
+        elements.listGrid.replaceChildren(...items.map((item) => {
+            const wrapper = makeElement("div"); wrapper.append(createMediaCard(item));
+            if (collection && state.editCollection) { const label = makeElement("label", "collection-toggle"); const box = document.createElement("input"); box.type="checkbox";box.checked=collection.keys.includes(mediaKey(item));box.addEventListener("change",()=>{collection.keys=box.checked?[...new Set([...collection.keys,mediaKey(item)])]:collection.keys.filter(k=>k!==mediaKey(item));const p=watchingPrefs();p.collections=p.collections.map(c=>c.id===collection.id?collection:c);saveWatchingPrefs(p);});label.append(box,document.createTextNode("In this collection"));wrapper.append(label); }
+            return wrapper;
+        }));
         elements.listEmpty.hidden = items.length > 0;
     }
 
@@ -2548,42 +2635,20 @@
         showToast('History cleared.');
     }
 
-    function renderCalendar() {
-        const series = state.watchlist.map((item) => normalizeMedia(item)).filter((item) => mediaType(item) === 'tv');
-        if (elements.calendarEmpty) elements.calendarEmpty.hidden = series.length > 0;
-        if (!elements.calendarBoard) return;
-        if (!series.length) {
-            elements.calendarBoard.replaceChildren();
-            return;
-        }
-
-        const dated = new Map();
-        const undated = [];
-        series.forEach((item) => {
-            const rawDate = String(item.next_episode_to_air?.air_date || item.first_air_date || '');
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
-                undated.push(item);
-                return;
-            }
-            const key = rawDate.slice(0, 7);
-            if (!dated.has(key)) dated.set(key, []);
-            dated.get(key).push(item);
-        });
-
-        const groups = [...dated.entries()].sort(([left], [right]) => right.localeCompare(left));
-        if (undated.length) groups.push(['unknown', undated]);
-        elements.calendarBoard.replaceChildren(...groups.map(([key, items]) => {
-            const section = makeElement('section', 'calendar-group');
-            const label = key === 'unknown'
-                ? 'Date not supplied'
-                : new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' })
-                    .format(new Date(`${key}-01T00:00:00Z`));
-            section.append(makeElement('h2', '', label));
-            const rail = makeElement('div', 'media-rail');
-            rail.append(...items.map((item) => createMediaCard(item)));
-            section.append(rail);
-            return section;
-        }));
+    async function renderCalendar() {
+        const generation = state.calendarGeneration = (state.calendarGeneration || 0) + 1;
+        const series = state.watchlist.map(item => normalizeMedia(item)).filter(item => mediaType(item) === 'tv');
+        elements.calendarEmpty.hidden = series.length > 0;
+        elements.calendarBoard.replaceChildren(makeElement('p', '', series.length ? 'Checking upcoming episodes...' : 'Follow a series by adding it to My list.'));
+        const entries = []; let failed = 0; const queue = [...series];
+        const worker = async () => { while(queue.length && generation === state.calendarGeneration) { const media=queue.shift();try { const details=media._addonCatalog ? (await resolveAddonDetails(media)).details : await api('/api/tmdb/tv/'+encodeURIComponent(media.id)); for(const episode of upcomingEpisodes(details)) entries.push({media,episode}); } catch { failed++; } } };
+        await Promise.all([worker(),worker(),worker()]);
+        if(generation !== state.calendarGeneration)return;
+        entries.sort((a,b)=>Date.parse(a.episode.date)-Date.parse(b.episode.date));
+        const nodes=entries.map(({media,episode})=>{const row=makeElement('article','calendar-episode');const button=makeElement('button','button button-quiet',mediaTitle(media));button.addEventListener('click',()=>openDetails(media));row.append(button,makeElement('p','',new Date(episode.date).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+' · S'+episode.season+' E'+episode.episode+' · '+(episode.title||episode.name||'Upcoming episode')));return row;});
+        if(!nodes.length)nodes.push(makeElement('p','','No announced episodes in the next 90 days.'));
+        if(failed)nodes.push(makeElement('p','',failed+' series could not be refreshed. Try again later.'));
+        elements.calendarBoard.replaceChildren(...nodes);
     }
 
     async function shareMedia(media) {

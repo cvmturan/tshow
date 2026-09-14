@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {nextEpisode,upcomingEpisodes,matchesSource,resumePosition} from '../public/js/watching-tools.mjs';
+test('next episode crosses seasons and excludes unreleased episodes',()=>{const d={videos:[{id:'a',season:1,episode:2},{id:'b',season:2,episode:1,released:'2020-01-01'},{id:'c',season:2,episode:2,released:'2099-01-01'}]};assert.equal(nextEpisode(d,'a').id,'b');assert.equal(nextEpisode(d,'b'),null);assert.equal(nextEpisode(d,'missing'),null);});
+test('calendar uses upcoming episodes, never series premiere',()=>{const now=Date.parse('2026-09-13');assert.deepEqual(upcomingEpisodes({first_air_date:'2026-09-14'},now),[]);assert.equal(upcomingEpisodes({videos:[{released:'2026-09-14'},{released:'2020-01-01'}]},now).length,1);});
+test('source filters require known size and match metadata',()=>{assert.equal(matchesSource({name:'1080p Hindi',sizeBytes:2*1024**3},{quality:'1080',language:'hindi',maxSize:3}),true);assert.equal(matchesSource({name:'1080p'},{maxSize:3}),false);});
+test('resume clamps safely for different encodes',()=>{assert.equal(resumePosition(120,100),98);assert.equal(resumePosition(0,100),0);assert.equal(resumePosition(20,NaN),0);});
+
+test('movie trailer containers are not episode arrays',()=>{assert.equal(nextEpisode({videos:{results:[]}},null),null);assert.deepEqual(upcomingEpisodes({videos:{results:[]}}),[]);});

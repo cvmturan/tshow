@@ -4185,3 +4185,20 @@ body:not(.legal-page) { background:radial-gradient(ellipse at 85% 0,rgba(124,58,
  .poster-frame { border-radius:13px; }
 }
 #account-button { color:#fff; background:linear-gradient(125deg,#7c3aed,#6d28d9) !important; border-color:rgba(196,181,253,.3); box-shadow:0 5px 20px rgba(109,40,217,.2); }
+.watching-toolbar { display:flex;flex-wrap:wrap;align-items:end;gap:12px;margin:12px 0 22px;min-width:0; }
+.watching-toolbar label { display:grid;gap:5px;font-size:12px;color:var(--muted);flex:1 1 130px;min-width:0; }
+.watching-toolbar input,.watching-toolbar select,.settings-card select { width:100%;min-width:0;max-width:100%;padding:10px 12px;font:inherit;color:var(--text);background:var(--surface-raised);border:1px solid var(--line);border-radius:10px; }
+.watching-toolbar > input { flex:1 1 180px;width:auto; }
+.source-refinements { margin:10px 0; }
+.player-followup { padding:0 22px; }
+.collection-toggle { display:flex;gap:8px;align-items:center;padding:10px;font-size:13px; }
+.calendar-episode { padding:18px 0;border-bottom:1px solid var(--line); }
+:root { --theme-hue:263;--theme-saturation:75%; }
+:root[data-theme="blue"] { --theme-hue:215;--accent:#60a5fa;--accent-light:#93c5fd; }
+:root[data-theme="emerald"] { --theme-hue:158;--accent:#34d399;--accent-light:#6ee7b7; }
+:root[data-theme="classic"] { --theme-hue:220;--theme-saturation:8%;--accent:#cbd5e1;--accent-light:#e2e8f0; }
+.button-primary,#account-button { background:linear-gradient(125deg,hsl(var(--theme-hue) var(--theme-saturation) 46%),hsl(var(--theme-hue) var(--theme-saturation) 35%)) !important; }
+.eyebrow,.section-kicker { color:var(--accent-light); }
+.source-filter[aria-pressed="true"],#data-saver-button { color:var(--accent-light);border-color:var(--accent); }
+body:not(.legal-page) { background:radial-gradient(ellipse at 85% 0,hsl(var(--theme-hue) var(--theme-saturation) 45% / .1),transparent 42rem),#090b10; }
+@media(max-width:700px) { .watching-toolbar input,.watching-toolbar select,.settings-card select { font-size:16px; }.player-followup { padding:0 14px; }.source-refinements label { flex-basis:100px; } }

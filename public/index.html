@@ -21,12 +21,12 @@
     <link rel="icon" href="/assets/tshow-icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="/assets/tshow-icon-192.png">
     <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="stylesheet" href="/css/main.css?v=20260913-4">
+    <link rel="stylesheet" href="/css/main.css?v=20260913-5">
     <script src="/vendor/hls/hls.min.js" defer></script>
     <link rel="stylesheet" href="/css/accounts.css?v=20260911-3">
     <script src="/js/accounts.js?v=20260911-4" defer></script>
     <script src="/js/cloudflare-context.js?v=20260911-4" defer></script>
-    <script src="/js/app.js?v=20260913-4" defer></script>
+    <script src="/js/app.js?v=20260913-5" defer></script>
     <script src="/js/experience.js?v=20260913-2" defer></script>
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"TShow","url":"https://showt.fun/","logo":"https://showt.fun/assets/tshow-icon-512.png","email":"support@showt.fun"}</script>
 </head>
@@ -256,7 +256,7 @@
                     <p>Keep a lightweight watchlist without creating an account.</p>
                 </div>
             </div>
-            <div class="media-grid" id="list-grid"></div>
+            <div class="watching-toolbar"><label>Collection<select id="collection-select"><option value="">All titles</option></select></label><input id="collection-name" maxlength="40" placeholder="New collection name" aria-label="New collection name"><button id="create-collection" class="button button-quiet" type="button">Create collection</button><button id="edit-collection" class="button button-quiet" type="button" hidden>Manage titles</button></div><div class="media-grid" id="list-grid"></div>
             <div class="empty-state" id="list-empty" hidden>
                 <span class="empty-icon" aria-hidden="true">＋</span>
                 <h2>Your list is waiting</h2>
@@ -485,7 +485,7 @@
             <div class="page-heading">
                 <div><p class="eyebrow">Preferences</p><h1>Settings</h1><p>Simple controls for this browser. No account is required.</p></div>
             </div>
-            <div class="settings-grid">
+            <div class="settings-grid"><section class="settings-card"><p class="section-kicker">Make it yours</p><h2>Appearance and captions</h2><label>Theme<select id="theme-select"><option value="violet">Violet cinema</option><option value="blue">Midnight blue</option><option value="emerald">Emerald</option><option value="classic">Classic dark</option></select></label><label>Preferred subtitle language<select id="preferred-subtitle"><option value="off">Off</option><option value="en">English</option><option value="hi">Hindi</option><option value="es">Spanish</option><option value="fr">French</option><option value="de">German</option><option value="ja">Japanese</option><option value="ko">Korean</option><option value="ta">Tamil</option><option value="te">Telugu</option></select></label><p>Choices save automatically and sync when signed in. Subtitles depend on the source.</p></section>
                 <section class="settings-card">
                     <div><p class="section-kicker">Viewing region</p><h2>Streaming availability</h2><p>Choose the country used for legal watch-provider results.</p></div>
                     <label for="region-select">Country</label>
@@ -579,7 +579,7 @@
                     </div>
                 </div>
                 <label class="sr-only" for="stream-select">Choose a video source</label>
-                <select id="stream-select" aria-describedby="source-summary source-compatibility-help player-source-note"></select>
+                <div class="watching-toolbar source-refinements"><label>Quality<select id="source-quality"><option value="">Any quality</option><option value="2160">4K / 2160p</option><option value="1080">1080p</option><option value="720">720p</option><option value="480">480p</option></select></label><label>Language<input id="source-language" placeholder="e.g. Hindi" maxlength="30"></label><label>File size<select id="source-size"><option value="">Any size</option><option value="1">Up to 1 GB</option><option value="3">Up to 3 GB</option><option value="5">Up to 5 GB</option><option value="10">Up to 10 GB</option></select></label><button id="reset-source-filters" class="button button-quiet" type="button">Reset filters</button></div><select id="stream-select" aria-describedby="source-summary source-compatibility-help player-source-note"></select>
                 <p class="source-compatibility-help" id="source-compatibility-help">Choose a source to see what the browser can do with it.</p>
             </div>
             <div class="speed-control data-saver-control">
@@ -625,7 +625,7 @@
             </div>
             </details>
 
-        <div class="player-description">
+        <div class="watching-toolbar player-followup"><button id="recover-source-button" class="button button-quiet" type="button" hidden>Try another source · keep position</button><button id="next-episode-button" class="button button-primary" type="button" hidden>Next episode</button></div><div class="player-description">
             <div>
                 <strong id="player-source-title">Public demo</strong>
                 <p id="player-source-note">Short CC0 sample used only to test browser playback.</p>
