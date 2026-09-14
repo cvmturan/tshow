@@ -8,9 +8,9 @@ const manifest = JSON.parse(fs.readFileSync(new URL('../public/manifest.webmanif
 const worker = fs.readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
 
 test('the production shell loads the interaction layer and refreshes its cache', () => {
-  assert.match(index, /experience\.js\?v=20260914-1/);
-  assert.match(worker, /tshow-shell-v41/);
-  assert.match(worker, /experience\.js\?v=20260914-1/);
+  assert.match(index, /experience\.js\?v=20260914-2/);
+  assert.match(worker, /tshow-shell-v42/);
+  assert.match(worker, /experience\.js\?v=20260914-2/);
 });
 
 test('smart search and player gestures remain wired without the mobile dock', () => {

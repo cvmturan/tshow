@@ -12,3 +12,20 @@ test('Mayday never inherits Silo episode IDs, including after repeated switching
  assert.equal(select({media_type:'movie'}, state.activeVideoId, state, type), null);
  assert.equal(select({media_type:'tv'}, null, state, type), null);
 });
+
+const browserHelpers = source.slice(source.indexOf('    function browserAttemptURL('), source.indexOf('    function comparableSourceText('));
+const classify = new Function('isSafeWebURL', browserHelpers + ';return streamCompatibilityGroup;')(value => /^https?:\/\//.test(value || ''));
+test('all direct URLs are browser attempts before checks, even after a failed probe', () => {
+ for (const field of ['url','attemptUrl','externalPlayerUrl']) assert.equal(classify({[field]:'https://media.example/episode',browserReady:false,_browserCheckDone:true}), 'playable');
+ assert.equal(classify({externalUrl:'https://store.example/title'}),'external');
+ assert.equal(classify({externalAppUrl:'magnet:?xt=abc'}),'external');
+ assert.equal(classify({url:'javascript:alert(1)'}),'app-only');
+ assert.equal(classify({url:'https://example.com/demo.mp4',isDemo:true}),'demo');
+});
+
+test('initial playback prefers H.264 over a smaller HEVC source and skips demos', () => {
+ const code=source.slice(source.indexOf('    function recommendedStreamIndex()'),source.indexOf('    function sourceCounts()'));
+ const state={streams:[{isDemo:true,url:'https://example.com/demo.mp4',format:'mp4'},{url:'https://example.com/hevc',title:'H.265',sizeBytes:1},{url:'https://example.com/avc',title:'H.264',sizeBytes:2}]};
+ const recommend=new Function('state','browserAttemptURL',code+';return recommendedStreamIndex();');
+ assert.equal(recommend(state,s=>s.url),2);
+});

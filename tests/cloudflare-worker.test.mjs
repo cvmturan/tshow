@@ -300,3 +300,13 @@ test('opaque URLs and notWebReady hints reach the browser player', async () => {
  assert.equal(body.streams[0].url,streams[0].url);
  assert.equal(body.streams[1].playbackMode,'direct');
 });
+
+test('contact drafts expose only public aliases and validate input', async () => {
+ for(const [type,recipient] of Object.entries({support:'support@showt.fun',feedback:'support@showt.fun',copyright:'copyright@showt.fun',security:'legal@showt.fun'})){
+  const r=await worker.fetch(new Request('https://showt.fun/api/contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,name:'Test User',email:'test@example.com',message:'Testing a draft only',consent:true})}),env(),createContext());
+  assert.equal(r.status,200);
+  const body=await r.json();assert.equal(body.recipient,recipient);assert.equal(body.fallback,'mailto');
+ }
+ const r=await worker.fetch(new Request('https://showt.fun/api/contact',{method:'POST',body:'{}'}),env(),createContext());
+ assert.equal(r.status,400);
+});

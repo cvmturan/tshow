@@ -1,8 +1,8 @@
 (async () => {
     'use strict';
     await window.TShowAccount?.ready;
-    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260914-1');
-    const { uniqueHistory } = await import('./media-history.mjs?v=20260914-1');
+    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260914-2');
+    const { uniqueHistory } = await import('./media-history.mjs?v=20260914-2');
 
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
@@ -512,7 +512,7 @@
                 showUnsupportedSource(
                     elements.videoPlayer.error?.code === 2
                         ? 'The provider could not deliver this video. Its link may have expired or returned an access error. Choose another source.'
-                        : 'This source could not be decoded. Some HEVC, Dolby audio and Matroska files require conversion before a browser can play them. Try an H.264/AAC source.'
+                        : 'This link did not return playable video. The provider may be returning an error page, or the video format may be unsupported. Try another source; H.264/AAC is usually the best browser option.'
                 );
                 return;
             }
@@ -1494,11 +1494,11 @@
         state.subtitleLibrary = [];
         renderSourcePicker();
         renderSubtitlePicker();
-        elements.sourceSummary.textContent = 'Checking compatibility…';
+        elements.sourceSummary.textContent = 'Finding sources…';
         elements.sourceCompatibilityHelp.textContent = 'Choose a source to see what the browser can do with it.';
         elements.speedSelect.disabled = true;
         elements.playerSourceTitle.textContent = 'Looking for sources';
-        elements.playerSourceNote.textContent = 'Checking installed browser-safe add-ons…';
+        elements.playerSourceNote.textContent = 'Searching installed add-ons…';
         openDialog(elements.playerDialog);
 
         try {
@@ -1574,15 +1574,19 @@
         } catch (error) {
             if (requestId !== state.playerRequest) return;
             elements.videoLoading.hidden = true;
-            elements.playerSourceTitle.textContent = 'No playable source';
+            elements.playerSourceTitle.textContent = 'Sources could not be loaded';
             elements.playerSourceNote.textContent = error.message;
             showToast(error.message, 'error');
         }
     }
 
+    function browserAttemptURL(stream) {
+        return [stream?.url, stream?.attemptUrl, stream?.externalPlayerUrl].find(isSafeWebURL) || null;
+    }
+
     function streamCompatibilityGroup(stream) {
         if (stream.isDemo) return 'demo';
-        if (stream._browserChecked) return 'playable';
+        if (browserAttemptURL(stream)) return 'playable';
         if (stream.externalUrl || stream.externalPlayerUrl || stream.externalAppUrl) return 'external';
         return 'app-only';
     }
@@ -1631,23 +1635,18 @@
     }
 
     function recommendedStreamIndex() {
-        const smallest = (items) => items.sort((left, right) => {
-            const leftSize = Number(left.stream.sizeBytes) || Number.MAX_SAFE_INTEGER;
-            const rightSize = Number(right.stream.sizeBytes) || Number.MAX_SAFE_INTEGER;
-            return leftSize - rightSize;
-        })[0]?.index ?? -1;
-        const browserNative = state.streams
-            .map((stream, index) => ({ stream, index }))
-            .filter(({ stream }) =>
-                !stream.isDemo && stream._browserChecked &&
-                (stream.playbackMode === 'direct' || stream.playbackMode === 'hls')
-            );
-        const nativeIndex = smallest(browserNative);
-        if (nativeIndex >= 0) return nativeIndex;
-
-        return smallest(state.streams
-            .map((stream, index) => ({ stream, index }))
-            .filter(({ stream }) => !stream.isDemo && stream._browserChecked));
+        const candidates = state.streams.map((stream, index) => ({stream, index}))
+            .filter(({stream}) => !stream.isDemo && browserAttemptURL(stream));
+        const rank = stream => {
+            if (stream._browserChecked) return 0;
+            const label = [stream.title,stream.description,stream.behaviorHints?.filename].join(' ');
+            if (/h[. ]?265|hevc|truehd|dts/i.test(label)) return 4;
+            if (/^(mp4|webm|hls)$/.test(stream.format || '')) return 1;
+            return /h[. ]?264|avc/i.test(label) ? 2 : 3;
+        };
+        candidates.sort((a,b) => rank(a.stream)-rank(b.stream) ||
+            (Number(a.stream.sizeBytes)||Number.MAX_SAFE_INTEGER)-(Number(b.stream.sizeBytes)||Number.MAX_SAFE_INTEGER));
+        return candidates[0]?.index ?? -1;
     }
 
     function sourceCounts() {
@@ -1689,7 +1688,7 @@
             : 'No sources in this filter';
 
         const groups = [
-            ['playable', 'Browser checked'],
+            ['playable', 'Try in browser'],
             ['external', 'External apps and provider links'],
             ['app-only', 'App-only or download sources'],
             ['demo', 'Player test — not the selected title']
@@ -1737,17 +1736,17 @@
         elements.streamSelect.disabled = state.visibleStreamIndexes.length === 0;
 
         elements.sourceSummary.textContent =
-            `${counts.all} entries for ${mediaTitle(state.playerMedia)}: ${counts.playable} browser checked, ` +
+            `${counts.all} entries for ${mediaTitle(state.playerMedia)}: ${counts.playable} browser attempts, ` +
             `${counts.external} provider links, ${counts['app-only']} app-only, ${counts.demo} player test.`;
         elements.sourceCompatibilityHelp.textContent = sourceFilterHelp(state.sourceFilter);
     }
 
     function sourceFilterHelp(filter) {
-        if (filter === 'playable') return 'Optional checks verify only the start of a video. Choose All to try any direct source. Checks stop when you select a source.';
-        if (filter === 'external') return 'User-added sources open directly in external players, source apps, or provider pages. Their video never passes through TShow.';
+        if (filter === 'playable') return 'Every direct video link can be tried here. Your browser tests playback when you select it; compatibility is not guaranteed.';
+        if (filter === 'external') return 'These entries provide a website or app link rather than a direct video URL.';
         if (filter === 'app-only') return 'These are downloads, redirects, torrents, or unknown formats intended for another app.';
         if (filter === 'demo') return 'The short CC0 flower video only tests the player. It is not the movie or episode you selected.';
-        return 'Quality and language use provider labels. Size limits exclude entries without a known size. Browser checked remains optional.';
+        return 'Quality and language use provider labels. Size limits exclude entries without a known size. Link checks are optional; every direct link can be tried.';
     }
 
     function streamOptionLabel(stream, index, mirrorNumber = 1, mirrorTotal = 1) {
@@ -1766,7 +1765,7 @@
         } else if (stream.browserReady) {
             badges.push(stream.format ? stream.format.toUpperCase() : 'browser attempt');
         }
-        if (stream.externalPlayerUrl && !stream.browserReady) badges.push('external player');
+        if (browserAttemptURL(stream) && !stream.browserReady) badges.push('browser attempt');
         if (stream.externalAppUrl && !stream.browserReady) badges.push('source app');
         if (stream.externalUrl && !stream.browserReady) badges.push('provider link');
         if (!stream.browserReady && !stream.externalUrl && !stream.externalPlayerUrl && !stream.externalAppUrl && !stream.attemptUrl) {
@@ -1785,10 +1784,8 @@
         elements.openExternalSource.hidden = true;
         elements.tryDirectSource.hidden = true;
         elements.speedSelect.disabled = true;
-        elements.externalSourceTitle.textContent = `Choose an external source for ${mediaTitle(media)}`;
-        elements.externalSourceNote.textContent = counts['app-only']
-            ? `The add-on returned ${counts['app-only']} unavailable entries. Select another entry to open it in an external player, source app, or provider page.`
-            : 'Select a source below to open it directly on this device. User-added video is not relayed through TShow.';
+        elements.externalSourceTitle.textContent = `Choose a source for ${mediaTitle(media)}`;
+        elements.externalSourceNote.textContent = 'Direct video links try this browser first. Website and app links are listed separately.';
         elements.playerSourceTitle.textContent = 'Choose a source';
         elements.playerSourceNote.textContent =
             'Select a direct link to play in this browser. Link checking is optional and stops before playback.';
@@ -1800,7 +1797,7 @@
         savePlaybackProgress(true);
         state.activeStreamIndex = index;
         state.browserProbes?.forEach(cancel => cancel());
-        const attemptURL = [stream.attemptUrl, stream.url, stream.externalPlayerUrl].find(isSafeWebURL);
+        const attemptURL = browserAttemptURL(stream);
         if ((forceAttempt || !stream.browserReady) && attemptURL) {
             stream = {
                 ...stream,
@@ -3912,13 +3909,14 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-            if (result.fallback === 'mailto' && result.recipient) {
+            if (result.fallback === 'mailto') {
+                const recipient = ({support:'support@showt.fun',feedback:'support@showt.fun',copyright:'copyright@showt.fun',security:'legal@showt.fun'})[payload.type] || 'support@showt.fun';
                 const params = new URLSearchParams({
                     subject: result.subject || `[TShow ${payload.type}] Message from ${payload.name}`,
                     body: `${payload.message}\n\nFrom: ${payload.name} <${payload.email}>`
                 });
                 elements.contactStatus.textContent = result.message || 'Opening your email app…';
-                window.location.href = `mailto:${encodeURIComponent(result.recipient)}?${params.toString()}`;
+                window.location.href = `mailto:${encodeURIComponent(recipient)}?${params.toString()}`;
                 showToast('Your email app is ready. Press Send there to finish.', 'success');
                 return;
             }
