@@ -21,13 +21,13 @@
     <link rel="icon" href="/assets/tshow-icon-192.png" type="image/png">
     <link rel="apple-touch-icon" href="/assets/tshow-icon-192.png">
     <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="stylesheet" href="/css/main.css?v=20260914-3">
+    <link rel="stylesheet" href="/css/main.css?v=20260915-1">
     <script src="/vendor/hls/hls.min.js" defer></script>
     <link rel="stylesheet" href="/css/accounts.css?v=20260911-3">
     <script src="/js/accounts.js?v=20260911-4" defer></script>
     <script src="/js/cloudflare-context.js?v=20260911-4" defer></script>
-    <script src="/js/app.js?v=20260914-3" defer></script>
-    <script src="/js/experience.js?v=20260914-3" defer></script>
+    <script src="/js/app.js?v=20260915-1" defer></script>
+    <script src="/js/experience.js?v=20260915-1" defer></script>
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"TShow","url":"https://showt.fun/","logo":"https://showt.fun/assets/tshow-icon-512.png","email":"support@showt.fun"}</script>
 </head>
 <body>
@@ -85,7 +85,7 @@
                 id="search-input"
                 name="query"
                 type="search"
-                placeholder="Search movies & series"
+                placeholder="Search"
                 autocomplete="off"
                 maxlength="120"
             >
@@ -572,7 +572,6 @@
                     </div>
                     <div class="source-filter-group" id="source-filter-group" aria-label="Filter video sources">
                         <button class="source-filter" type="button" data-source-filter="all" aria-pressed="true">All <span>0</span></button>
-                        <button class="source-filter" type="button" data-source-filter="working" aria-pressed="false">Working <span>0</span></button>
                         <button class="source-filter" type="button" data-source-filter="playable" aria-pressed="false">Try in browser <span>0</span></button>
                         <button class="source-filter" type="button" data-source-filter="external" aria-pressed="false">Links <span>0</span></button>
                         <button class="source-filter" type="button" data-source-filter="app-only" aria-pressed="false">App-only <span>0</span></button>
@@ -590,7 +589,7 @@
                 <span class="control-label">External player</span>
                 <div>
                     <button class="button button-primary" id="open-in-desktop" type="button" hidden>Play in TShow</button>
-                    <button class="button button-quiet" id="open-in-vlc" type="button">Open directly in VLC</button>
+                    <button class="button button-quiet" id="open-in-vlc" type="button">VLC Player</button>
                     <button class="button button-quiet" id="open-in-outplayer" type="button">Open in Outplayer</button>
                     <button class="button button-quiet" id="open-in-source-app" type="button" hidden>Open source app</button>
                     <button class="button button-quiet" id="copy-source-link" type="button">Copy source link</button>

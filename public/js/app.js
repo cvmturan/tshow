@@ -1,8 +1,8 @@
 (async () => {
     'use strict';
     await window.TShowAccount?.ready;
-    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260914-3');
-    const { uniqueHistory } = await import('./media-history.mjs?v=20260914-3');
+    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260915-1');
+    const { uniqueHistory } = await import('./media-history.mjs?v=20260915-1');
 
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
@@ -1590,7 +1590,6 @@
 
     function streamCompatibilityGroup(stream) {
         if (stream.isDemo) return 'demo';
-        if (stream._browserChecked && browserAttemptURL(stream)) return 'working';
         if (browserAttemptURL(stream)) return 'playable';
         if (stream.externalUrl || stream.externalPlayerUrl || stream.externalAppUrl) return 'external';
         return 'app-only';
@@ -1658,7 +1657,6 @@
         const counts = {
             all: state.streams.length,
             playable: 0,
-            working: 0,
             external: 0,
             'app-only': 0,
             demo: 0
@@ -1694,7 +1692,6 @@
             : 'No sources in this filter';
 
         const groups = [
-            ['working', 'Working — video start checked'],
             ['playable', 'Try in browser'],
             ['external', 'External apps and provider links'],
             ['app-only', 'App-only or download sources'],
@@ -1714,6 +1711,7 @@
             const indexes = state.visibleStreamIndexes.filter((index) =>
                 streamCompatibilityGroup(state.streams[index]) === groupName
             );
+            indexes.sort((a,b)=>Number(Boolean(state.streams[b]._browserChecked))-Number(Boolean(state.streams[a]._browserChecked)));
             if (!indexes.length) continue;
             const optgroup = document.createElement('optgroup');
             optgroup.label = `${groupLabel} (${indexes.length})`;
@@ -1743,13 +1741,12 @@
         elements.streamSelect.disabled = state.visibleStreamIndexes.length === 0;
 
         elements.sourceSummary.textContent =
-            `${counts.all} entries for ${mediaTitle(state.playerMedia)}: ${counts.working} working, ${counts.playable} other browser attempts, ` +
+            `${counts.all} entries for ${mediaTitle(state.playerMedia)}: ${counts.playable} browser links, ` +
             `${counts.external} provider links, ${counts['app-only']} app-only, ${counts.demo} player test.`;
         elements.sourceCompatibilityHelp.textContent = sourceFilterHelp(state.sourceFilter);
     }
 
     function sourceFilterHelp(filter) {
-        if (filter === 'working') return 'These sources loaded a video frame on this device. This checks the start, not the entire video or every audio track.';
         if (filter === 'playable') return 'Every direct video link can be tried here. Your browser tests playback when you select it; compatibility is not guaranteed.';
         if (filter === 'external') return 'These entries provide a website or app link rather than a direct video URL.';
         if (filter === 'app-only') return 'These are downloads, redirects, torrents, or unknown formats intended for another app.';

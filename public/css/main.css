@@ -4224,3 +4224,60 @@ body:not(.legal-page) { background:radial-gradient(ellipse at 85% 0,hsl(var(--th
  .watching-toolbar label { width:100%;min-width:0; }
  .player-followup { padding:0 12px; }
 }
+
+/* Compact touch layouts: keep focusable fields readable without automatic zoom. */
+@media (max-width: 900px), (pointer: coarse) {
+ html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+ body { min-width:0; }
+ body input, body select, body textarea { font-size:16px !important; }
+ button, a, input, select, summary { touch-action:manipulation; }
+ main, .view, .page-view, .catalog-shell, .details-content, .details-main { min-width:0; max-width:100%; }
+ dialog { max-width:100%; overflow-x:hidden; }
+ dialog[open] { animation:none; transform:none; }
+ .account-dialog { width:calc(100% - 20px); padding:18px; }
+ .account-dialog header { gap:10px; }
+ .account-dialog input, .account-dialog select { min-width:0; }
+ .details-actions, .hero-actions, .external-player-actions { flex-wrap:wrap; }
+ .details-actions > *, .hero-actions > *, .external-player-actions > * { min-width:0; }
+}
+@media (max-width: 600px) {
+ .site-header .search-form { min-width:0; }
+ .site-header .search-form input { min-width:0; width:100%; padding-inline:6px; }
+ .hero { min-height:0; padding:calc(var(--header-height) + 48px) 16px 30px; }
+ .hero h1 { font-size:clamp(30px,9vw,42px); }
+ .hero-overview { margin-block:12px; line-height:1.5; }
+ .hero-actions { gap:8px; margin-top:16px; }
+ .hero-note { margin-bottom:0; }
+ .catalog-shell { margin-top:0; padding:16px 12px 24px; border-radius:0; }
+ .catalog-section { margin-top:26px; }
+ .section-header { margin-bottom:12px; gap:8px; }
+ .page-view { padding-inline:12px; }
+ .page-heading { margin-bottom:18px; }
+ .media-rail { margin-right:0; padding-right:0; }
+ .media-dialog, .player-dialog { width:100%; max-width:100%; max-height:100dvh; margin:0; border:0; }
+ .details-backdrop, .title-detail-view .details-backdrop { min-height:180px; }
+ .details-layout, .title-detail-view .details-layout { margin-top:-48px; padding:0 14px 20px; }
+ .details-poster { width:80px; margin-bottom:12px; }
+ .details-main h2 { font-size:30px; }
+ .details-extras { padding:18px 14px; gap:20px; }
+ .details-status { min-height:180px; padding:35px 16px; }
+ .player-topbar { padding:10px 12px; gap:8px; }
+ .player-controls-row { padding:10px 12px; gap:8px; }
+ .source-picker { gap:8px; }
+ .source-picker-header { gap:8px; }
+ .source-summary { font-size:12px; margin:0; }
+ .source-filter-group { gap:6px; }
+ .source-filter { padding:7px 9px; }
+ .player-source-info { padding:10px 12px; }
+ .player-followup:has(> :not([hidden])) { margin-block:8px; }
+ .player-followup:not(:has(> :not([hidden]))) { display:none; }
+ .site-footer { padding:20px 14px; }
+}
+
+.detail-rail-section { position:relative; min-width:0; }
+@media (max-width:600px) {
+ .rail-controls { left:0; right:0; max-width:100%; }
+ .details-overview { margin-block:14px; }
+ .details-actions { margin-top:16px; }
+ .details-extras { padding-top:14px; }
+}
