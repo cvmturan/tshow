@@ -1,8 +1,8 @@
 (async () => {
     'use strict';
     await window.TShowAccount?.ready;
-    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260914-2');
-    const { uniqueHistory } = await import('./media-history.mjs?v=20260914-2');
+    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260914-3');
+    const { uniqueHistory } = await import('./media-history.mjs?v=20260914-3');
 
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
@@ -507,7 +507,7 @@
             const stream = state.streams[state.activeStreamIndex];
             if (stream) { stream._browserChecked = false; stream._browserCheckDone = true; renderSourcePicker(); }
             document.getElementById('recover-source-button').hidden = false;
-            if (stream?.directFromProvider) {
+            if (browserAttemptURL(stream)) {
                 updateExternalPlayerActions(stream);
                 showUnsupportedSource(
                     elements.videoPlayer.error?.code === 2
@@ -1489,6 +1489,10 @@
         state.activeAttemptIndex = null;
         state.activeStreamIndex = null;
         state.visibleStreamIndexes = [];
+        stopSourceAutomation();
+        state.autoTried = new Set();
+        state.checksPaused = false;
+        document.getElementById('check-sources-button').textContent = 'Pause link checks';
         state.sourceFilter = 'all';
         state.streams = [];
         state.subtitleLibrary = [];
@@ -1586,6 +1590,7 @@
 
     function streamCompatibilityGroup(stream) {
         if (stream.isDemo) return 'demo';
+        if (stream._browserChecked && browserAttemptURL(stream)) return 'working';
         if (browserAttemptURL(stream)) return 'playable';
         if (stream.externalUrl || stream.externalPlayerUrl || stream.externalAppUrl) return 'external';
         return 'app-only';
@@ -1653,6 +1658,7 @@
         const counts = {
             all: state.streams.length,
             playable: 0,
+            working: 0,
             external: 0,
             'app-only': 0,
             demo: 0
@@ -1688,6 +1694,7 @@
             : 'No sources in this filter';
 
         const groups = [
+            ['working', 'Working — video start checked'],
             ['playable', 'Try in browser'],
             ['external', 'External apps and provider links'],
             ['app-only', 'App-only or download sources'],
@@ -1736,12 +1743,13 @@
         elements.streamSelect.disabled = state.visibleStreamIndexes.length === 0;
 
         elements.sourceSummary.textContent =
-            `${counts.all} entries for ${mediaTitle(state.playerMedia)}: ${counts.playable} browser attempts, ` +
+            `${counts.all} entries for ${mediaTitle(state.playerMedia)}: ${counts.working} working, ${counts.playable} other browser attempts, ` +
             `${counts.external} provider links, ${counts['app-only']} app-only, ${counts.demo} player test.`;
         elements.sourceCompatibilityHelp.textContent = sourceFilterHelp(state.sourceFilter);
     }
 
     function sourceFilterHelp(filter) {
+        if (filter === 'working') return 'These sources loaded a video frame on this device. This checks the start, not the entire video or every audio track.';
         if (filter === 'playable') return 'Every direct video link can be tried here. Your browser tests playback when you select it; compatibility is not guaranteed.';
         if (filter === 'external') return 'These entries provide a website or app link rather than a direct video URL.';
         if (filter === 'app-only') return 'These are downloads, redirects, torrents, or unknown formats intended for another app.';
@@ -1795,8 +1803,10 @@
         let stream = state.streams[index];
         if (!stream || stream._requestKey !== state.playerRequestKey) return;
         savePlaybackProgress(true);
+        stopSourceAutomation();
         state.activeStreamIndex = index;
-        state.browserProbes?.forEach(cancel => cancel());
+        state.autoTried ||= new Set();
+        state.autoTried.add(index);
         const attemptURL = browserAttemptURL(stream);
         if ((forceAttempt || !stream.browserReady) && attemptURL) {
             stream = {
@@ -1889,6 +1899,7 @@
             String(stream.type || '').toLowerCase().includes('mpegurl') ||
             /\.m3u8(?:$|[?#])/i.test(stream.url);
 
+        armSourceTimeout(index);
         if (isHls) {
             playHlsStream(stream.url);
         } else {
@@ -2069,8 +2080,19 @@
     }
     function saveWatchingPrefs(patch) { saveStored(STORAGE_KEYS.playerPreferences, JSON.stringify({...watchingPrefs(),...patch})); }
     function setupWatchingTools() {
-        document.getElementById('check-sources-button').addEventListener('click',async()=>{if(state.activeStreamIndex!=null)return showToast('Close and reopen sources before checking, so playback is not interrupted.');const button=document.getElementById('check-sources-button');button.disabled=true;button.textContent='Checking…';try{await checkBrowserSources(state.playerRequest);}finally{button.disabled=false;button.textContent='Check links';}});
-        elements.videoPlayer.addEventListener('playing',()=>{const stream=state.streams[state.activeStreamIndex];if(stream&&!stream.isDemo){stream._browserChecked=true;stream._browserCheckDone=true;renderSourcePicker();}});
+        document.getElementById('check-sources-button').addEventListener('click',()=>{
+            state.checksPaused=!state.checksPaused;
+            document.getElementById('check-sources-button').textContent=state.checksPaused?'Resume link checks':'Pause link checks';
+            if(state.checksPaused){clearTimeout(state.sourceScanTimer);state.browserProbes?.forEach(cancel=>cancel());}
+            else checkBrowserSources(state.playerRequest);
+        });
+        elements.videoPlayer.addEventListener('playing',()=>{
+            clearTimeout(state.sourceStartTimer);
+            const stream=state.streams[state.activeStreamIndex];
+            if(stream&&!stream.isDemo&&elements.videoPlayer.videoWidth>0){stream._browserChecked=true;stream._browserCheckDone=true;renderSourcePicker();}
+            checkBrowserSources(state.playerRequest);
+        });
+        elements.videoPlayer.addEventListener('waiting',()=>{state.browserProbes?.forEach(cancel=>cancel());});
         const prefs=watchingPrefs();
         const theme=document.getElementById('theme-select');theme.value=['violet','blue','emerald','classic'].includes(prefs.theme)?prefs.theme:'violet';document.documentElement.dataset.theme=theme.value;
         theme.addEventListener('change',()=>{document.documentElement.dataset.theme=theme.value;saveWatchingPrefs({theme:theme.value});});
@@ -2267,28 +2289,78 @@
 
     function updateDataSaverButton() {}
 
-    async function checkBrowserSources(requestId) {
-        const queue = state.streams.filter(stream => stream.browserReady && stream.url && !stream.isDemo);
-        const current = () => requestId === state.playerRequest && elements.playerDialog.open && state.activeStreamIndex == null;
-        async function worker() {
-            while (queue.length && current()) {
-                const stream = queue.shift();
-                const passed = await probeBrowserSource(stream, current);
-                if (!current()) return;
-                stream._browserChecked = passed;
-                stream._browserCheckDone = true;
+    function stopSourceAutomation() {
+        state.scanGeneration = (state.scanGeneration || 0) + 1;
+        clearTimeout(state.sourceStartTimer);
+        clearTimeout(state.sourceScanTimer);
+        clearTimeout(state.sourceFailureTimer);
+        state.browserProbes?.forEach(cancel => cancel());
+    }
+
+    function armSourceTimeout(index) {
+        clearTimeout(state.sourceStartTimer);
+        const request = state.playerRequest;
+        state.sourceStartTimer = setTimeout(() => {
+            if (request !== state.playerRequest || index !== state.activeStreamIndex || !elements.playerDialog.open) return;
+            // An autoplay restriction is not a bad source: keep a decoded video ready for the Play button.
+            if (elements.videoPlayer.readyState >= 2 && elements.videoPlayer.videoWidth > 0) return;
+            showUnsupportedSource('This source took too long to start.');
+        }, 20000);
+    }
+
+    function advanceFailedSource(message) {
+        const current = state.streams[state.activeStreamIndex];
+        if (!current || current.isDemo || !browserAttemptURL(current)) return false;
+        clearTimeout(state.sourceStartTimer);
+        current._browserChecked = false;
+        current._browserCheckDone = true;
+        renderSourcePicker();
+        const next = state.streams.map((stream,index)=>({stream,index}))
+            .filter(({stream,index})=>!stream.isDemo && browserAttemptURL(stream) && !state.autoTried?.has(index))
+            .sort((a,b)=>Number(Boolean(b.stream._browserChecked))-Number(Boolean(a.stream._browserChecked)))[0];
+        if (!next) {
+            elements.playerSourceNote.textContent = 'All direct sources were attempted. None is playing right now; retry later for fresh provider links.';
+            return false;
+        }
+        const request = state.playerRequest, index = state.activeStreamIndex;
+        clearTimeout(state.sourceFailureTimer);
+        elements.playerSourceNote.textContent = message + ' Trying the next source…';
+        state.sourceFailureTimer = setTimeout(()=>{
+            if (request === state.playerRequest && index === state.activeStreamIndex && elements.playerDialog.open) applyStream(next.index);
+        }, 150);
+        return true;
+    }
+
+    function canCheckInBackground() {
+        const video = elements.videoPlayer;
+        if (state.checksPaused || video.hidden || video.readyState < 3 || video.videoWidth <= 0) return false;
+        if (video.paused) return true;
+        for (let i=0;i<video.buffered.length;i++) {
+            if (video.buffered.start(i)<=video.currentTime && video.buffered.end(i)-video.currentTime>=12) return true;
+        }
+        return false;
+    }
+
+    function checkBrowserSources(requestId) {
+        clearTimeout(state.sourceScanTimer);
+        if (state.checksPaused || state.scanBusy || requestId !== state.playerRequest || !elements.playerDialog.open) return;
+        const generation = state.scanGeneration;
+        const current = () => generation === state.scanGeneration && requestId === state.playerRequest && elements.playerDialog.open && canCheckInBackground();
+        state.sourceScanTimer = setTimeout(async()=>{
+            if (generation !== state.scanGeneration || requestId !== state.playerRequest || !elements.playerDialog.open || state.checksPaused) return;
+            const stream=state.streams.find((s,i)=>i!==state.activeStreamIndex && !s.isDemo && browserAttemptURL(s) && !s._browserCheckDone);
+            if (!stream) return;
+            if (!canCheckInBackground()) { checkBrowserSources(requestId); return; }
+            state.scanBusy = true;
+            const passed=await probeBrowserSource({...stream,url:browserAttemptURL(stream)},current);
+            state.scanBusy = false;
+            if (current()) {
+                stream._browserChecked=passed;
+                stream._browserCheckDone=true;
                 renderSourcePicker();
-                if (passed && state.activeStreamIndex == null) {
-                    elements.playerSourceTitle.textContent = 'Browser source found';
-                    elements.playerSourceNote.textContent = 'Choose a checked source below to start playback.';
-                }
             }
-        }
-        await Promise.all([worker(), worker()]);
-        if (current() && !state.streams.some(s => s._browserChecked)) {
-            elements.playerSourceTitle.textContent = 'No browser source verified';
-            elements.playerSourceNote.textContent = 'None loaded a video frame within the check time. You can still use All sources with an external player.';
-        }
+            if (generation === state.scanGeneration) checkBrowserSources(requestId);
+        }, 3000);
     }
 
     function probeBrowserSource(stream, current) {
@@ -2461,6 +2533,8 @@
     }
 
     function showUnsupportedSource(message) {
+        if (advanceFailedSource(message)) return;
+        clearVideoElement();
         document.getElementById("recover-source-button").hidden = false;
         elements.videoLoading.hidden = true;
         elements.videoPlayer.hidden = true;
@@ -2473,6 +2547,7 @@
     }
 
     function closePlayer() {
+        stopSourceAutomation();
         state.playerRequest += 1;
         state.playerRequestKey = null;
         savePlaybackProgress(true);

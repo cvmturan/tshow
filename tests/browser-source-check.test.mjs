@@ -19,6 +19,39 @@ for (const outcome of ['video', 'error', 'audio']) test(`browser check ${outcome
 
 test('source discovery runs checks and keeps all links available', () => {
  assert.match(source, /checkBrowserSources\(state.playerRequest\)/);
- assert.doesNotMatch(source, /checkBrowserSources\(requestId\);/);
+
  assert.match(source, /state.sourceFilter = 'all'/);
+});
+
+const automation = source.slice(source.indexOf('    function stopSourceAutomation('), source.indexOf('    function probeBrowserSource('));
+function automationHarness() {
+ let id=0;const timers=new Map(),applied=[];
+ const state={playerRequest:1,scanGeneration:1,activeStreamIndex:0,autoTried:new Set([0]),streams:[{url:'https://example.com/one'},{url:'https://example.com/two'},{isDemo:true,url:'https://example.com/demo'}]};
+ const video={hidden:false,paused:false,readyState:4,videoWidth:1920,currentTime:10,buffered:{length:1,start:()=>0,end:()=>30}};
+ const context={state,elements:{playerDialog:{open:true},videoPlayer:video,playerSourceNote:{}},clearTimeout:key=>timers.delete(key),setTimeout:fn=>{timers.set(++id,fn);return id;},renderSourcePicker(){},browserAttemptURL:s=>s?.url,applyStream:i=>applied.push(i),probeBrowserSource:async()=>true};
+ vm.createContext(context);vm.runInContext(automation,context);
+ const tick=async()=>{const [key,fn]=timers.entries().next().value;timers.delete(key);await fn();};
+ return {context,state,video,timers,applied,tick};
+}
+test('failure selects the next real source and never loops or selects a demo',async()=>{
+ const h=automationHarness();assert.equal(h.context.advanceFailedSource('failed'),true);await h.tick();assert.deepEqual(h.applied,[1]);
+ h.state.autoTried.add(1);assert.equal(h.context.advanceFailedSource('failed'),false);
+});
+test('a delayed failure cannot start a source after changing title',async()=>{
+ const h=automationHarness();h.context.advanceFailedSource('failed');h.state.playerRequest++;await h.tick();assert.deepEqual(h.applied,[]);
+});
+test('background checking waits for buffer and confirms an alternative without switching playback',async()=>{
+ const h=automationHarness();h.video.buffered.end=()=>12;
+ h.context.checkBrowserSources(1);await h.tick();assert.equal(h.state.streams[1]._browserChecked,undefined);
+ h.video.buffered.end=()=>30;await h.tick();assert.equal(h.state.streams[1]._browserChecked,true);assert.deepEqual(h.applied,[]);
+});
+test('cancelled background results cannot mark another title or source',async()=>{
+ const h=automationHarness();let finish;h.context.probeBrowserSource=()=>new Promise(resolve=>{finish=resolve;});
+ h.context.checkBrowserSources(1);const pending=h.tick();h.state.scanGeneration++;h.state.playerRequest++;finish(true);await pending;
+ assert.equal(h.state.streams[1]._browserChecked,undefined);
+});
+test('closing cancels all scheduled attempts and active probes',()=>{
+ const h=automationHarness();let cancelled=false;h.state.browserProbes=new Set([()=>{cancelled=true;}]);
+ h.context.advanceFailedSource('failed');h.context.checkBrowserSources(1);h.context.stopSourceAutomation();
+ assert.equal(h.timers.size,0);assert.equal(cancelled,true);
 });
