@@ -1,6 +1,6 @@
 {
   "name": "tshow-desktop",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "description": "TShow desktop app with private, device-local playback",
   "main": "main.js",
@@ -22,21 +22,30 @@
       "preload.js",
       "security.js",
       "player.js",
-      "package.json"
+      "package.json",
+      "embedded-player.js"
     ],
     "extraResources": [
       {
         "from": "vendor/mpv",
         "to": "mpv",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "THIRD_PARTY_NOTICES.md",
         "to": "THIRD_PARTY_NOTICES.md"
+      },
+      {
+        "from": "embedded-input.conf",
+        "to": "embedded-input.conf"
       }
     ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "artifactName": "TShow-${version}-${arch}.${ext}"
     },
     "nsis": {

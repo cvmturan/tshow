@@ -1,8 +1,8 @@
 (async () => {
     'use strict';
     await window.TShowAccount?.ready;
-    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260915-1');
-    const { uniqueHistory } = await import('./media-history.mjs?v=20260915-1');
+    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260915-2');
+    const { uniqueHistory } = await import('./media-history.mjs?v=20260915-2');
 
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
@@ -466,6 +466,25 @@
         });
         elements.dataSaverButton?.addEventListener('click', toggleDataSaver);
         elements.openInDesktop?.addEventListener('click', openActiveStreamInDesktop);
+        window.tshowDesktop?.onPlayback?.(event => {
+            if (!state.nativePlayback || event.sessionId !== state.nativePlayback.id || state.nativePlayback.key !== state.playerRequestKey) return;
+            if (event.type === 'progress') {
+                state.nativePlayback.position = event.position;
+                state.nativePlayback.duration = event.duration;
+                state.playingScope = state.playerRequestKey;
+                savePlaybackProgress();
+            } else if (event.type === 'error') {
+                savePlaybackProgress(true);
+                elements.playerSourceNote.textContent = event.error;
+                showToast(event.error, 'warning');
+                document.getElementById('recover-source-button').hidden = false;
+            } else if (event.type === 'closed') {
+                savePlaybackProgress(true);
+                elements.videoLoading.hidden = true;
+                elements.playerSourceNote.textContent = 'Choose a source to play in the app. Esc returns here from video playback.';
+                state.nativePlayback = null;
+            }
+        });
         elements.openInVlc?.addEventListener('click', openActiveStreamInVlc);
         elements.openInOutplayer?.addEventListener('click', openActiveStreamInOutplayer);
         elements.openInSourceApp?.addEventListener('click', openActiveStreamInSourceApp);
@@ -1692,7 +1711,7 @@
             : 'No sources in this filter';
 
         const groups = [
-            ['playable', 'Try in browser'],
+            ['playable', window.tshowDesktop?.embeddedPlayback ? 'Play in app' : 'Try in browser'],
             ['external', 'External apps and provider links'],
             ['app-only', 'App-only or download sources'],
             ['demo', 'Player test — not the selected title']
@@ -1837,6 +1856,11 @@
             ? `Direct from ${stream.sourceAddonName || 'the provider'} to this browser — TShow does not proxy or transcode it.`
             : stream.description || `Provided by ${stream.sourceAddonName || 'an installed add-on'}`;
 
+        if (window.tshowDesktop?.embeddedPlayback && attemptURL) {
+            playEmbeddedStream(stream, index, attemptURL);
+            return;
+        }
+
         if (!stream.browserReady) {
             const canOpenExternally = isSafeWebURL(stream.externalUrl);
             const canOpenPlayer = isSafeWebURL(stream.externalPlayerUrl);
@@ -1906,6 +1930,27 @@
         }
     }
 
+    async function playEmbeddedStream(stream, index, url) {
+        const key = state.playerRequestKey;
+        const id = crypto.randomUUID();
+        const saved = state.continueEntry;
+        const matching = saved?.media && mediaKey(saved.media) === mediaKey(state.playerMedia) && saved.videoId === state.playerVideoId;
+        state.nativePlayback = { id, key, position: 0, duration: 0 };
+        elements.playerSourceNote.textContent = 'Opening in the app… Esc returns to your sources. Subtitles and audio are in Playback.';
+        try {
+            const result = await window.tshowDesktop.play({ url, sessionId: id,
+                title: stream._displayTitle || stream.title || elements.playerTitle.textContent || 'TShow',
+                behaviorHints: stream.behaviorHints || {}, start: matching ? saved.currentTime : 0 });
+            if (state.nativePlayback?.id !== id || key !== state.playerRequestKey || index !== state.activeStreamIndex) return;
+            if (!result?.ok) throw new Error(result?.error || 'The video could not start.');
+        } catch (error) {
+            if (state.nativePlayback?.id !== id) return;
+            elements.playerSourceNote.textContent = error.message || 'Try another source.';
+            document.getElementById('recover-source-button').hidden = false;
+            showToast(error.message || 'Try another source.', 'warning');
+        }
+    }
+
     function activeExternalPlayerURL() {
         const stream = state.streams[state.activeStreamIndex];
         return isSafeWebURL(stream?.externalPlayerUrl) ? stream.externalPlayerUrl : null;
@@ -1924,7 +1969,7 @@
         const appAvailable = isSafeExternalAppURL(stream?.externalAppUrl);
         const copyAvailable = Boolean(playerAvailable || appAvailable || isSafeWebURL(stream?.externalUrl));
         elements.externalPlayerActions.hidden = !copyAvailable;
-        const desktopAvailable = Boolean(playerAvailable && window.tshowDesktop?.isDesktop);
+        const desktopAvailable = Boolean(playerAvailable && window.tshowDesktop?.isDesktop && !window.tshowDesktop?.embeddedPlayback);
         elements.openInDesktop.hidden = !desktopAvailable;
         elements.openInDesktop.disabled = !desktopAvailable;
         elements.openInVlc.hidden = !playerAvailable;
@@ -2586,6 +2631,10 @@
     }
 
     function clearVideoElement() {
+        if (window.tshowDesktop?.embeddedPlayback) {
+            state.nativePlayback = null;
+            window.tshowDesktop.stop().catch(() => {});
+        }
         state.playingScope = null;
         state.subtitleRequest = (state.subtitleRequest || 0) + 1;
         document.getElementById("playback-settings")?.removeAttribute("open");
@@ -2599,17 +2648,20 @@
     }
 
     function savePlaybackProgress(force = false) {
-        if (!state.playerMedia || state.playingScope !== state.playerRequestKey || state.streams[state.activeStreamIndex]?.isDemo || !Number.isFinite(elements.videoPlayer.duration)) return;
+        const native = state.nativePlayback?.key === state.playerRequestKey ? state.nativePlayback : null;
+        const duration = native ? native.duration : elements.videoPlayer.duration;
+        const currentTime = native ? native.position : elements.videoPlayer.currentTime;
+        if (!state.playerMedia || state.playingScope !== state.playerRequestKey || state.streams[state.activeStreamIndex]?.isDemo || !Number.isFinite(duration) || duration <= 0) return;
 
         const now = Date.now();
         if (!force && now - state.lastProgressSave < 15_000) return;
-        if (elements.videoPlayer.currentTime < 2) return;
+        if (currentTime < 2) return;
 
         const entry = {
             media: state.playerMedia,
             videoId: state.playerVideoId,
-            currentTime: Math.round(elements.videoPlayer.currentTime),
-            duration: Math.round(elements.videoPlayer.duration),
+            currentTime: Math.round(currentTime),
+            duration: Math.round(duration),
             updatedAt: now
         };
 
