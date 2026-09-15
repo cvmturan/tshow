@@ -14,7 +14,8 @@ function playerArguments(kind, request) {
       '--load-scripts=no',
       '--ytdl=no',
       '--force-window=immediate',
-      '--keep-open=no',
+      '--keep-open=yes',
+      '--idle=yes',
       '--osc=yes',
       '--input-default-bindings=yes',
       '--cursor-autohide=1000',
@@ -28,7 +29,7 @@ function playerArguments(kind, request) {
     return args;
   }
 
-  const args = ['--play-and-exit', '--no-video-title-show', `--meta-title=${request.title}`];
+  const args = ['--no-one-instance', '--no-play-and-exit', '--no-video-title-show', `--meta-title=${request.title}`];
   if (request.headers.Referer) args.push(`--http-referrer=${request.headers.Referer}`);
   if (request.headers['User-Agent']) args.push(`--http-user-agent=${request.headers['User-Agent']}`);
   args.push(request.url);
@@ -103,20 +104,41 @@ async function launchPlayer(request, dependencies = {}) {
     ? 'VLC is not installed in a standard location on this computer.'
     : 'The TShow playback engine is missing. Reinstall the latest TShow Desktop build.');
   const spawnProcess = dependencies.spawn || spawn;
-  const child = spawnProcess(player.executable, playerArguments(player.kind, request), {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: false
+  return new Promise((resolve, reject) => {
+    let child, settled = false, timer;
+    const fail = message => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(new Error(message));
+    };
+    try {
+      child = spawnProcess(player.executable, playerArguments(player.kind, request), {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: false
+      });
+    } catch { fail('The player could not be started. Reinstall it and try again.'); return; }
+    child.once('error', error => {
+      const reason = error.code === 'ENOENT' ? 'The player executable was not found.' :
+        error.code === 'EACCES' ? 'Windows denied permission to start the player.' :
+        'Windows could not start the player (' + (error.code || 'launch error') + ').';
+      fail(reason + ' Reinstall the latest player build and try again.');
+    });
+    child.once('exit', (code, signal) => {
+      fail('The player closed before it was ready' + (code != null ? ' (exit ' + code + ')' : '') +
+        '. Try another source; if this also happens with the player test video, reinstall the player.');
+    });
+    child.once('spawn', () => {
+      timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        child.unref?.();
+        resolve({ player: player.bundled ? 'TShow Player' : player.kind, bundled: player.bundled });
+      }, dependencies.startupWaitMs ?? 1500);
+    });
   });
-  child.unref?.();
-  return { player: player.bundled ? 'TShow Player' : player.kind, bundled: player.bundled };
+
 }
 
-module.exports = {
-  playerArguments,
-  bundledPlayerPath,
-  knownPlayerPaths,
-  playerKind,
-  findPlayer,
-  launchPlayer
-};
+module.exports = { playerArguments, bundledPlayerPath, knownPlayerPaths, playerKind, findPlayer, launchPlayer };
