@@ -4217,6 +4217,9 @@ body:not(.legal-page) { background:radial-gradient(ellipse at 85% 0,hsl(var(--th
  .toast-region { bottom:calc(16px + env(safe-area-inset-bottom)); }
  .player-dialog,.media-dialog { width:100%;max-width:100%;max-height:100dvh;margin:0;border-radius:0; }
  .player-controls-row { display:flex;flex-direction:column;align-items:stretch;padding:12px;gap:12px; }
+ .external-player-control:not([hidden]) { order:-1; }
+ .external-player-control > div { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px; }
+ .external-player-control button { width:100%;min-height:44px; }
  .player-dialog input,.player-dialog select,.player-dialog textarea,.media-dialog input,.media-dialog select { font-size:16px !important; }
  .source-picker-header { flex-direction:column;align-items:stretch; }
  .source-filter-group { display:flex;flex-wrap:wrap; }

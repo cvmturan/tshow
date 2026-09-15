@@ -1,18 +1,18 @@
 'use strict';
 
-const SHELL_CACHE = 'tshow-shell-v45';
+const SHELL_CACHE = 'tshow-shell-v46';
 const SHELL_FILES = [
   '/',
   '/index.html',
   '/legal.html',
   '/js/accounts.js?v=20260911-4',
   '/css/accounts.css?v=20260911-3',
-  '/css/main.css?v=20260915-2',
+  '/css/main.css?v=20260915-3',
   '/js/cloudflare-context.js?v=20260911-4',
-  '/js/app.js?v=20260915-2',
-  '/js/experience.js?v=20260915-2',
-  '/js/media-history.mjs?v=20260915-2',
-  '/js/watching-tools.mjs?v=20260915-2',
+  '/js/app.js?v=20260915-3',
+  '/js/experience.js?v=20260915-3',
+  '/js/media-history.mjs?v=20260915-3',
+  '/js/watching-tools.mjs?v=20260915-3',
   '/manifest.webmanifest',
   '/assets/tshow-logo.png',
   '/assets/tshow-icon-192.png',

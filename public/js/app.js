@@ -1,8 +1,8 @@
 (async () => {
     'use strict';
     await window.TShowAccount?.ready;
-    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260915-2');
-    const { uniqueHistory } = await import('./media-history.mjs?v=20260915-2');
+    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260915-3');
+    const { uniqueHistory } = await import('./media-history.mjs?v=20260915-3');
 
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
@@ -1469,6 +1469,7 @@
         state.activeExternalURL = null;
         state.activeExternalAppURL = null;
         state.activeAttemptIndex = null;
+        updateExternalPlayerActions(null);
         elements.playerDialog.classList.add('is-trailer');
         elements.playerTitle.textContent = `${mediaTitle(media)} · Official trailer`;
         elements.videoPlayer.hidden = true;
@@ -1506,6 +1507,7 @@
         state.activeExternalURL = null;
         state.activeExternalAppURL = null;
         state.activeAttemptIndex = null;
+        updateExternalPlayerActions(null);
         state.activeStreamIndex = null;
         state.visibleStreamIndexes = [];
         stopSourceAutomation();
