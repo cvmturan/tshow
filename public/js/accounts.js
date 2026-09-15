@@ -1,7 +1,7 @@
 (() => {
     'use strict';
     const names = { watchlist: 'streamflix:watchlist:v1', continueWatching: 'streamflix:continue:v1', recentlyViewed: 'tshow:recent:v1', addonURLs: 'streamflix:addons:v1', region: 'tshow:region:v1', playerPreferences: 'tshow:player:v1' };
-    let user = null, config = {}, versions = {}, pending = new Map(), saving = false, flushPromise = null, timer, blocked = false;
+    let user = null, config = {}, versions = {}, pending = new Map(), saving = false, flushPromise = null, timer, blocked = false, lastRefresh = 0;
     const status = text => {
         for (const id of ['account-sync-status', 'settings-save-state']) {
             const el = document.getElementById(id);
@@ -12,6 +12,12 @@
         ? `tshow:user:${user.id}:${Object.hasOwn(names, key) ? key : `local:${key}`}`
         : (names[key] || key);
     const parse = (key, text) => key === 'region' ? text : JSON.parse(text || 'null');
+    function mergeAddonURLs(remote, local) {
+        const valid = value => Array.isArray(value)
+            ? value.filter(url => typeof url === 'string' && url.length <= 8192)
+            : [];
+        return [...new Set([...valid(remote), ...valid(local)])].slice(-20);
+    }
     async function request(path, options = {}) {
         const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...options, headers: { 'Content-Type': 'application/json', 'X-TShow-Request': '1', ...options.headers }, signal: AbortSignal.timeout(15000) });
         const data = await response.json();
@@ -39,12 +45,25 @@
         saving = true;
         flushPromise = (async () => {
             try {
+                let addonConflictRetries = 0;
                 while (pending.size) {
                     const [key, value] = pending.entries().next().value;
-                    const result = await request(`/api/account/data/${key}`, { method: 'PUT', body: JSON.stringify({ value, version: versions[key] || 0 }) });
-                    versions[key] = result.version;
-                    if (pending.get(key) === value) pending.delete(key);
-                    persistPending();
+                    try {
+                        const result = await request(`/api/account/data/${key}`, { method: 'PUT', body: JSON.stringify({ value, version: versions[key] || 0 }) });
+                        versions[key] = result.version;
+                        if (pending.get(key) === value) pending.delete(key);
+                        persistPending();
+                    } catch (e) {
+                        if (e.status !== 409 || key !== 'addonURLs' || addonConflictRetries >= 2) throw e;
+                        const cloud = await request('/api/account/data');
+                        const remote = cloud.data.addonURLs;
+                        const merged = mergeAddonURLs(remote?.value, pending.get(key));
+                        versions[key] = remote?.version || 0;
+                        pending.set(key, merged);
+                        localStorage.setItem(keyFor(key), JSON.stringify(merged));
+                        addonConflictRetries += 1;
+                        persistPending();
+                    }
                 }
                 status('All changes saved to your account');
             } catch (e) {
@@ -53,6 +72,21 @@
             }
         })().finally(() => { saving = false; flushPromise = null; });
         return flushPromise;
+    }
+    async function refresh() {
+        if (!user || saving || pending.size || Date.now() - lastRefresh < 5000) return [];
+        lastRefresh = Date.now();
+        const cloud = await request('/api/account/data');
+        const changed = [];
+        for (const key of Object.keys(names)) {
+            const entry = cloud.data[key];
+            if (!entry || entry.version === versions[key]) continue;
+            versions[key] = entry.version;
+            localStorage.setItem(keyFor(key), key === 'region' ? entry.value : JSON.stringify(entry.value));
+            changed.push(key);
+        }
+        if (changed.length) window.dispatchEvent(new CustomEvent('tshow:account-data-refreshed', { detail: { keys: changed } }));
+        return changed;
     }
     function exportData(local = false) {
         const download = data => {
@@ -229,8 +263,10 @@
         setupUI();
         if (pending.size) void flush();
     })();
-    window.TShowAccount = { ready, storageKey: keyFor, save, flush, get user() { return user; } };
+    window.TShowAccount = { ready, storageKey: keyFor, save, flush, refresh, get user() { return user; } };
     window.addEventListener('online', () => { void flush(); });
+    window.addEventListener('focus', () => { void refresh(); });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) void refresh(); });
     window.addEventListener('pagehide', () => { if (pending.size) void flush(); });
-    setInterval(() => { if (pending.size) void flush(); }, 30000);
+    setInterval(() => { if (pending.size) void flush(); else if (!document.hidden) void refresh(); }, 30000);
 })();
