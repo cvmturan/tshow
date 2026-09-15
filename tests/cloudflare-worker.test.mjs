@@ -301,6 +301,14 @@ test('opaque URLs and notWebReady hints reach the browser player', async () => {
  assert.equal(body.streams[1].playbackMode,'direct');
 });
 
+test('torrent-only results do not pretend to be Outplayer URLs', async () => {
+ const request=new Request('https://showt.fun/api/addons/browser-result',{method:'POST',headers:{Origin:'https://showt.fun','X-TShow-Request':'1','Content-Type':'application/json'},body:JSON.stringify({manifestURL:'https://provider.example/manifest.json',manifest:{id:'test.torrent',name:'Torrent fixture',resources:['stream'],types:['movie']},resource:'stream',data:{streams:[{infoHash:'0123456789abcdef0123456789abcdef01234567',fileIdx:0},{url:'https://media.example/direct-video'}]}})});
+ const response=await worker.fetch(request,{}, {waitUntil(){}}), body=await response.json();
+ assert.equal(body.streams[0].externalPlayerUrl,null);
+ assert.match(body.streams[0].unsupportedReason,/direct HTTP video URL/);
+ assert.equal(body.streams[1].externalPlayerUrl,'https://media.example/direct-video');
+});
+
 test('contact drafts expose only public aliases and validate input', async () => {
  for(const [type,recipient] of Object.entries({support:'support@showt.fun',feedback:'support@showt.fun',copyright:'copyright@showt.fun',security:'legal@showt.fun'})){
   const r=await worker.fetch(new Request('https://showt.fun/api/contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,name:'Test User',email:'test@example.com',message:'Testing a draft only',consent:true})}),env(),createContext());

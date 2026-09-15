@@ -1,8 +1,8 @@
 (async () => {
     'use strict';
     await window.TShowAccount?.ready;
-    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260915-3');
-    const { uniqueHistory } = await import('./media-history.mjs?v=20260915-3');
+    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260915-4');
+    const { uniqueHistory } = await import('./media-history.mjs?v=20260915-4');
 
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
@@ -1732,7 +1732,6 @@
             const indexes = state.visibleStreamIndexes.filter((index) =>
                 streamCompatibilityGroup(state.streams[index]) === groupName
             );
-            indexes.sort((a,b)=>Number(Boolean(state.streams[b]._browserChecked))-Number(Boolean(state.streams[a]._browserChecked)));
             if (!indexes.length) continue;
             const optgroup = document.createElement('optgroup');
             optgroup.label = `${groupLabel} (${indexes.length})`;
@@ -1785,7 +1784,6 @@
         const rawName = String(stream.name || stream.title || `Source ${index + 1}`).replace(/\s+/g, ' ');
         const name = rawName.length > 80 ? rawName.slice(0,77) + '…' : rawName;
         const badges = [size];
-        if (stream.browserReady && !stream.isDemo) badges.push(stream._browserChecked ? 'browser checked' : stream._browserCheckDone ? 'not verified' : 'not checked');
         if (stream.playbackMode === 'proxy' && stream.transcodeLowUrl) {
             badges.push('proxied link');
         } else if (stream.browserReady) {
@@ -2352,29 +2350,6 @@
         }, 20000);
     }
 
-    function advanceFailedSource(message) {
-        const current = state.streams[state.activeStreamIndex];
-        if (!current || current.isDemo || !browserAttemptURL(current)) return false;
-        clearTimeout(state.sourceStartTimer);
-        current._browserChecked = false;
-        current._browserCheckDone = true;
-        renderSourcePicker();
-        const next = state.streams.map((stream,index)=>({stream,index}))
-            .filter(({stream,index})=>!stream.isDemo && browserAttemptURL(stream) && !state.autoTried?.has(index))
-            .sort((a,b)=>Number(Boolean(b.stream._browserChecked))-Number(Boolean(a.stream._browserChecked)))[0];
-        if (!next) {
-            elements.playerSourceNote.textContent = 'All direct sources were attempted. None is playing right now; retry later for fresh provider links.';
-            return false;
-        }
-        const request = state.playerRequest, index = state.activeStreamIndex;
-        clearTimeout(state.sourceFailureTimer);
-        elements.playerSourceNote.textContent = message + ' Trying the next source…';
-        state.sourceFailureTimer = setTimeout(()=>{
-            if (request === state.playerRequest && index === state.activeStreamIndex && elements.playerDialog.open) applyStream(next.index);
-        }, 150);
-        return true;
-    }
-
     function canCheckInBackground() {
         const video = elements.videoPlayer;
         if (state.checksPaused || video.hidden || video.readyState < 3 || video.videoWidth <= 0) return false;
@@ -2401,7 +2376,6 @@
             if (current()) {
                 stream._browserChecked=passed;
                 stream._browserCheckDone=true;
-                renderSourcePicker();
             }
             if (generation === state.scanGeneration) checkBrowserSources(requestId);
         }, 3000);
@@ -2577,7 +2551,6 @@
     }
 
     function showUnsupportedSource(message) {
-        if (advanceFailedSource(message)) return;
         clearVideoElement();
         document.getElementById("recover-source-button").hidden = false;
         elements.videoLoading.hidden = true;
@@ -4104,4 +4077,3 @@
         return clientId;
     }
 })();
-

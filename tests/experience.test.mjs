@@ -11,7 +11,7 @@ const css = fs.readFileSync(new URL('../public/css/main.css', import.meta.url), 
 
 test('the production shell loads the interaction layer and refreshes its cache', () => {
   assert.match(index, /experience\.js\?v=20260915-3/);
-  assert.match(worker, /tshow-shell-v46/);
+  assert.match(worker, /tshow-shell-v47/);
   assert.match(worker, /experience\.js\?v=20260915-3/);
 });
 

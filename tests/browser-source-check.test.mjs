@@ -33,17 +33,15 @@ function automationHarness() {
  const tick=async()=>{const [key,fn]=timers.entries().next().value;timers.delete(key);await fn();};
  return {context,state,video,timers,applied,tick};
 }
-test('failure selects the next real source and never loops or selects a demo',async()=>{
- const h=automationHarness();assert.equal(h.context.advanceFailedSource('failed'),true);await h.tick();assert.deepEqual(h.applied,[1]);
- h.state.autoTried.add(1);assert.equal(h.context.advanceFailedSource('failed'),false);
-});
-test('a delayed failure cannot start a source after changing title',async()=>{
- const h=automationHarness();h.context.advanceFailedSource('failed');h.state.playerRequest++;await h.tick();assert.deepEqual(h.applied,[]);
+test('a failed foreground source never changes the user selection',()=>{
+ assert.doesNotMatch(source, /advanceFailedSource\(message\)/);
+ assert.doesNotMatch(automation, /applyStream\(next\.index\)/);
 });
 test('background checking waits for buffer and confirms an alternative without switching playback',async()=>{
  const h=automationHarness();h.video.buffered.end=()=>12;
  h.context.checkBrowserSources(1);await h.tick();assert.equal(h.state.streams[1]._browserChecked,undefined);
  h.video.buffered.end=()=>30;await h.tick();assert.equal(h.state.streams[1]._browserChecked,true);assert.deepEqual(h.applied,[]);
+ assert.doesNotMatch(automation, /stream\._browserCheckDone=true;\s*renderSourcePicker\(\)/);
 });
 test('cancelled background results cannot mark another title or source',async()=>{
  const h=automationHarness();let finish;h.context.probeBrowserSource=()=>new Promise(resolve=>{finish=resolve;});
@@ -52,6 +50,6 @@ test('cancelled background results cannot mark another title or source',async()=
 });
 test('closing cancels all scheduled attempts and active probes',()=>{
  const h=automationHarness();let cancelled=false;h.state.browserProbes=new Set([()=>{cancelled=true;}]);
- h.context.advanceFailedSource('failed');h.context.checkBrowserSources(1);h.context.stopSourceAutomation();
+ h.context.checkBrowserSources(1);h.context.stopSourceAutomation();
  assert.equal(h.timers.size,0);assert.equal(cancelled,true);
 });
