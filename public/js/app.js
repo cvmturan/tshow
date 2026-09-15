@@ -1,8 +1,8 @@
 (async () => {
     'use strict';
     await window.TShowAccount?.ready;
-    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260915-5');
-    const { uniqueHistory } = await import('./media-history.mjs?v=20260915-5');
+    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260915-6');
+    const { uniqueHistory } = await import('./media-history.mjs?v=20260915-6');
 
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
@@ -3927,7 +3927,7 @@
         const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
         elements.installAppButton.hidden = standalone;
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js').catch(() => {
+            navigator.serviceWorker.register('/sw.js?v=20260915-1').catch(() => {
                 // The website remains fully usable if offline installation is unavailable.
             });
         }
