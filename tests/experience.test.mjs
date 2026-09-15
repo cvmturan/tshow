@@ -12,7 +12,8 @@ const accounts = fs.readFileSync(new URL('../public/js/accounts.js', import.meta
 
 test('the production shell loads the interaction layer and refreshes its cache', () => {
   assert.match(index, /experience\.js\?v=20260915-3/);
-  assert.match(worker, /tshow-shell-v48/);
+  assert.match(worker, /tshow-shell-v49/);
+  assert.match(app, /serviceWorker\.register\('\/sw\.js\?v=20260915-1'\)/);
   assert.match(worker, /experience\.js\?v=20260915-3/);
 });
 
