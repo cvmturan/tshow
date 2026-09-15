@@ -8,11 +8,31 @@ const manifest = JSON.parse(fs.readFileSync(new URL('../public/manifest.webmanif
 const worker = fs.readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
 const app = fs.readFileSync(new URL('../public/js/app.js', import.meta.url), 'utf8');
 const css = fs.readFileSync(new URL('../public/css/main.css', import.meta.url), 'utf8');
+const accounts = fs.readFileSync(new URL('../public/js/accounts.js', import.meta.url), 'utf8');
 
 test('the production shell loads the interaction layer and refreshes its cache', () => {
   assert.match(index, /experience\.js\?v=20260915-3/);
-  assert.match(worker, /tshow-shell-v47/);
+  assert.match(worker, /tshow-shell-v48/);
   assert.match(worker, /experience\.js\?v=20260915-3/);
+});
+
+test('account add-ons reconcile across devices and refresh the active app', () => {
+  assert.match(accounts, /function mergeAddonURLs\(remote, local\)/);
+  assert.match(accounts, /e\.status !== 409 \|\| key !== 'addonURLs'/);
+  assert.match(accounts, /tshow:account-data-refreshed/);
+  assert.match(app, /event\.detail\?\.keys\?\.includes\('addonURLs'\)/);
+  const start = accounts.indexOf('    function mergeAddonURLs(');
+  const end = accounts.indexOf('    async function request(', start);
+  const merge = Function(`${accounts.slice(start, end)}; return mergeAddonURLs;`)();
+  assert.deepEqual(
+    merge(['https://one.example/manifest.json', 'https://two.example/manifest.json'], ['https://two.example/manifest.json', 'https://three.example/manifest.json']),
+    ['https://one.example/manifest.json', 'https://two.example/manifest.json', 'https://three.example/manifest.json']
+  );
+});
+
+test('mobile video gestures do not trigger accidental double-tap page zoom', () => {
+  assert.match(index, /viewport-fit=cover, interactive-widget=resizes-content/);
+  assert.match(css, /\.video-stage, \.video-stage video \{ touch-action:manipulation; \}/);
 });
 
 test('mobile external-player actions stay visible before the long source controls', () => {

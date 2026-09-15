@@ -29,6 +29,9 @@
 html {
     scroll-behavior: smooth;
     background: var(--bg);
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: clip;
 }
 
 body {
@@ -48,6 +51,7 @@ body {
 
 body.is-dialog-open {
     overflow: hidden;
+    width: 100%;
 }
 
 button,
@@ -4234,6 +4238,7 @@ body:not(.legal-page) { background:radial-gradient(ellipse at 85% 0,hsl(var(--th
  body { min-width:0; }
  body input, body select, body textarea { font-size:16px !important; }
  button, a, input, select, summary { touch-action:manipulation; }
+ .video-stage, .video-stage video { touch-action:manipulation; }
  main, .view, .page-view, .catalog-shell, .details-content, .details-main { min-width:0; max-width:100%; }
  dialog { max-width:100%; overflow-x:hidden; }
  dialog[open] { animation:none; transform:none; }

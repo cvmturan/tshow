@@ -1,8 +1,8 @@
 (async () => {
     'use strict';
     await window.TShowAccount?.ready;
-    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260915-4');
-    const { uniqueHistory } = await import('./media-history.mjs?v=20260915-4');
+    const { nextEpisode, upcomingEpisodes, matchesSource, resumePosition } = await import('./watching-tools.mjs?v=20260915-5');
+    const { uniqueHistory } = await import('./media-history.mjs?v=20260915-5');
 
     const STORAGE_KEYS = {
         watchlist: 'streamflix:watchlist:v1',
@@ -108,6 +108,13 @@
     async function init() {
         cacheElements();
         bindEvents();
+        window.addEventListener('tshow:account-data-refreshed', (event) => {
+            if (!event.detail?.keys?.includes('addonURLs')) return;
+            state.addonURLs = loadStoredArray(STORAGE_KEYS.addonURLs)
+                .filter(value => typeof value === 'string' && value.length <= 8192)
+                .slice(0, 20);
+            void initializeAddons();
+        });
         setupWatchingTools();
         updateListCount();
         renderContinueWatching();
@@ -3537,6 +3544,10 @@
     async function refreshAddons() {
         setButtonBusy(elements.refreshAddons, true, 'Refreshing…');
         try {
+            await window.TShowAccount?.refresh?.();
+            state.addonURLs = loadStoredArray(STORAGE_KEYS.addonURLs)
+                .filter(value => typeof value === 'string' && value.length <= 8192)
+                .slice(0, 20);
             const result = await syncStoredAddons();
             state.addons = Array.isArray(result.addons) ? result.addons : [];
             renderAddons();
